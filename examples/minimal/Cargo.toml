@@ -1,9 +1,0 @@
-[package]
-name = "minimal"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-bevy = "0.8.0"
-bevy_rapier3d = "0.16.0"
-bevy_fps_controller = { path = "../.." }
