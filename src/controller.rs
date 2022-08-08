@@ -11,6 +11,7 @@ pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
+        // TODO: these need to be sequential (exclusive system set)
         app
             .add_system(fps_controller_input)
             .add_system(fps_controller_look)
@@ -47,10 +48,10 @@ pub struct FpsController {
     pub gravity: f32,
     pub walk_speed: f32,
     pub run_speed: f32,
-    pub fwd_speed: f32,
+    pub forward_speed: f32,
     pub side_speed: f32,
     pub air_speed_cap: f32,
-    pub air_accel: f32,
+    pub air_acceleration: f32,
     pub max_air_speed: f32,
     pub accel: f32,
     pub friction: f32,
@@ -86,10 +87,10 @@ impl Default for FpsController {
             gravity: 23.0,
             walk_speed: 10.0,
             run_speed: 30.0,
-            fwd_speed: 30.0,
+            forward_speed: 30.0,
             side_speed: 30.0,
             air_speed_cap: 2.0,
-            air_accel: 20.0,
+            air_acceleration: 20.0,
             max_air_speed: 8.0,
             accel: 10.0,
             friction: 10.0,
@@ -123,6 +124,8 @@ impl Default for FpsController {
 // ███████╗╚██████╔╝╚██████╔╝██║╚██████╗
 // ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝ ╚═════╝
 
+const ANGLE_EPSILON: f32 = 0.001953125;
+
 pub fn fps_controller_input(
     key_input: Res<Input<KeyCode>>,
     mut windows: ResMut<Windows>,
@@ -139,8 +142,8 @@ pub fn fps_controller_input(
             mouse_delta *= controller.sensitivity;
 
             input.pitch = (input.pitch - mouse_delta.y).clamp(
-                -FRAC_PI_2 + 0.001953125,
-                FRAC_PI_2 - 0.001953125,
+                -FRAC_PI_2 + ANGLE_EPSILON,
+                FRAC_PI_2 - ANGLE_EPSILON,
             );
             input.yaw = input.yaw - mouse_delta.x;
         }
@@ -232,7 +235,7 @@ pub fn fps_controller_move(
                         ground_hit = Some(hit);
                     }
 
-                    let mut wish_direction = input.movement.z * controller.fwd_speed * forward + input.movement.x * controller.side_speed * right;
+                    let mut wish_direction = input.movement.z * controller.forward_speed * forward + input.movement.x * controller.side_speed * right;
                     let mut wish_speed = wish_direction.length();
                     if wish_speed > 1e-6 { // Avoid division by zero
                         wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
@@ -268,7 +271,7 @@ pub fn fps_controller_move(
                     } else {
                         controller.ground_tick = 0;
                         wish_speed = f32::min(wish_speed, controller.air_speed_cap);
-                        accelerate(wish_direction, wish_speed, controller.air_accel, dt, &mut end_velocity);
+                        accelerate(wish_direction, wish_speed, controller.air_acceleration, dt, &mut end_velocity);
                         end_velocity.y -= controller.gravity * dt;
                         let air_speed = end_velocity.xz().length();
                         if air_speed > controller.max_air_speed {
@@ -334,18 +337,21 @@ fn get_axis(key_input: &Res<Input<KeyCode>>, key_pos: KeyCode, key_neg: KeyCode)
 // ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝
 
 pub fn fps_controller_render(
-    logical_query: Query<(&Transform, &FpsController, &LogicalPlayer), With<LogicalPlayer>>,
+    logical_query: Query<(&Transform, &Collider, &FpsController, &LogicalPlayer), With<LogicalPlayer>>,
     mut render_query: Query<(&mut Transform, &RenderPlayer), Without<LogicalPlayer>>,
 ) {
-    // TODO: inefficient O(N^2) loop
-    for (logical_transform, controller, logical_player_id) in logical_query.iter() {
-        for (mut render_transform, render_player_id) in render_query.iter_mut() {
-            if logical_player_id.0 != render_player_id.0 {
-                continue;
+    // TODO: inefficient O(N^2) loop, use hash map?
+    for (logical_transform, collider, controller, logical_player_id) in logical_query.iter() {
+        if let Some(capsule) = collider.as_capsule() {
+            for (mut render_transform, render_player_id) in render_query.iter_mut() {
+                if logical_player_id.0 != render_player_id.0 {
+                    continue;
+                }
+                // TODO: let this be more configurable
+                let camera_height = capsule.segment().b().y + capsule.radius() * 0.75;
+                render_transform.translation = logical_transform.translation + Vec3::Y * camera_height;
+                render_transform.rotation = look_quat(controller.pitch, controller.yaw);
             }
-            // TODO: don't hardcode offset
-            render_transform.translation = logical_transform.translation + Vec3::Y * 2.0;
-            render_transform.rotation = look_quat(controller.pitch, controller.yaw);
         }
     }
 }

@@ -39,7 +39,7 @@ fn setup(mut commands: Commands) {
     // Note that we have two entities for the player
     // One is a "logical" player that handles the physics computation and collision
     // The other is a "render" player that is what is displayed to the user
-    // This distininction is useful for later on if you want to add multiplayer,
+    // This distinction is useful for later on if you want to add multiplayer,
     // where often time these two ideas are not exactly synced up
     commands.spawn()
         .insert(Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5))
