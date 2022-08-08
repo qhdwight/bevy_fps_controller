@@ -46,7 +46,8 @@ fn setup(
     // The other is a "render" player that is what is displayed to the user
     // This distinction is useful for later on if you want to add multiplayer,
     // where often time these two ideas are not exactly synced up
-    commands.spawn()
+    commands
+        .spawn()
         .insert(Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5))
         .insert(ActiveEvents::COLLISION_EVENTS)
         .insert(Velocity::zero())
@@ -63,49 +64,50 @@ fn setup(
             yaw: TAU * 5.0 / 8.0,
             ..default()
         })
-        .insert(FpsController {
-            ..default()
-        });
-    commands.spawn_bundle(Camera3dBundle::default())
+        .insert(FpsController { ..default() });
+    commands
+        .spawn_bundle(Camera3dBundle::default())
         .insert(RenderPlayer(0));
 
     // World
-    commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Box {
-            min_x: -20.0,
-            max_x: 20.0,
-            min_y: -0.25,
-            max_y: 0.25,
-            min_z: -20.0,
-            max_z: 20.0,
-        })),
-        material: materials.add(StandardMaterial {
-            base_color: Color::hex("E6EED6").unwrap(),
+    commands
+        .spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Box {
+                min_x: -20.0,
+                max_x: 20.0,
+                min_y: -0.25,
+                max_y: 0.25,
+                min_z: -20.0,
+                max_z: 20.0,
+            })),
+            material: materials.add(StandardMaterial {
+                base_color: Color::hex("E6EED6").unwrap(),
+                ..default()
+            }),
+            transform: Transform::identity(),
             ..default()
-        }),
-        transform: Transform::identity(),
-        ..default()
-    })
+        })
         .insert(Collider::cuboid(20.0, 0.25, 20.0))
         .insert(RigidBody::Fixed)
         .insert(Transform::identity());
 
-    commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Box {
-            min_x: -1.0,
-            max_x: 1.0,
-            min_y: -1.0,
-            max_y: 1.0,
-            min_z: -1.0,
-            max_z: 1.0,
-        })),
-        material: materials.add(StandardMaterial {
-            base_color: Color::hex("DDE2C6").unwrap(),
+    commands
+        .spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Box {
+                min_x: -1.0,
+                max_x: 1.0,
+                min_y: -1.0,
+                max_y: 1.0,
+                min_z: -1.0,
+                max_z: 1.0,
+            })),
+            material: materials.add(StandardMaterial {
+                base_color: Color::hex("DDE2C6").unwrap(),
+                ..default()
+            }),
+            transform: Transform::identity(),
             ..default()
-        }),
-        transform: Transform::identity(),
-        ..default()
-    })
+        })
         .insert(Collider::cuboid(1.0, 1.0, 1.0))
         .insert(RigidBody::Fixed)
         .insert(Transform::from_xyz(4.0, 1.0, 4.0));
