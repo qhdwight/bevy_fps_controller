@@ -62,6 +62,7 @@ pub struct FpsController {
     pub ground_tick: u8,
     pub stop_speed: f32,
     pub sensitivity: f32,
+    pub enable_input: bool,
     pub key_forward: KeyCode,
     pub key_back: KeyCode,
     pub key_left: KeyCode,
@@ -98,6 +99,7 @@ impl Default for FpsController {
             ground_tick: 0,
             stop_speed: 1.0,
             jump_speed: 8.5,
+            enable_input: true,
             key_forward: KeyCode::W,
             key_back: KeyCode::S,
             key_left: KeyCode::A,
@@ -129,6 +131,9 @@ pub fn fps_controller_input(
     mut query: Query<(&FpsController, &mut FpsControllerInput)>,
 ) {
     for (controller, mut input) in query.iter_mut() {
+        if !controller.enable_input {
+            continue;
+        }
         let window = windows.get_primary_mut().unwrap();
         if window.is_focused() {
             let mut mouse_delta = Vec2::ZERO;

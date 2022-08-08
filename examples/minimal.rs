@@ -117,14 +117,21 @@ pub fn manage_cursor(
     mut windows: ResMut<Windows>,
     btn: Res<Input<MouseButton>>,
     key: Res<Input<KeyCode>>,
+    mut controllers: Query<&mut FpsController>,
 ) {
     let window = windows.get_primary_mut().unwrap();
     if btn.just_pressed(MouseButton::Left) {
         window.set_cursor_lock_mode(true);
         window.set_cursor_visibility(false);
+        for mut controller in &mut controllers {
+            controller.enable_input = true;
+        }
     }
     if key.just_pressed(KeyCode::Escape) {
         window.set_cursor_lock_mode(false);
         window.set_cursor_visibility(true);
+        for mut controller in &mut controllers {
+            controller.enable_input = false;
+        }
     }
 }
