@@ -80,7 +80,7 @@ pub struct FpsController {
 impl Default for FpsController {
     fn default() -> Self {
         Self {
-            move_mode: MoveMode::Noclip,
+            move_mode: MoveMode::Ground,
             fly_speed: 10.0,
             fast_fly_speed: 30.0,
             gravity: 23.0,
@@ -218,10 +218,12 @@ pub fn fps_controller_move(
                     let lateral_speed = start_velocity.xz().length();
 
                     // Capsule cast downwards to find ground
+                    // Better than single raycast as it handles when you are near the edge of a surface
                     let mut ground_hit = None;
                     let cast_capsule = Collider::capsule(capsule.segment.a.into(), capsule.segment.b.into(), capsule.radius * 1.0625);
                     let cast_velocity = Vec3::Y * -1.0;
                     let max_distance = 0.125;
+                    // Avoid self collisions
                     let groups = QueryFilter::default().exclude_rigid_body(entity);
 
                     if let Some((_handle, hit)) = physics_context.cast_shape(
@@ -335,11 +337,13 @@ pub fn fps_controller_render(
     logical_query: Query<(&Transform, &FpsController, &LogicalPlayer), With<LogicalPlayer>>,
     mut render_query: Query<(&mut Transform, &RenderPlayer), Without<LogicalPlayer>>,
 ) {
+    // TODO: inefficient O(N^2) loop
     for (logical_transform, controller, logical_player_id) in logical_query.iter() {
         for (mut render_transform, render_player_id) in render_query.iter_mut() {
             if logical_player_id.0 != render_player_id.0 {
                 continue;
             }
+            // TODO: don't hardcode offset
             render_transform.translation = logical_transform.translation + Vec3::Y * 2.0;
             render_transform.rotation = look_quat(controller.pitch, controller.yaw);
         }

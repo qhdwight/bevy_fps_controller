@@ -36,6 +36,11 @@ fn setup(mut commands: Commands) {
         transform: Transform::from_xyz(-38.0, 40.0, 34.0),
         ..default()
     });
+    // Note that we have two entities for the player
+    // One is a "logical" player that handles the physics computation and collision
+    // The other is a "render" player that is what is displayed to the user
+    // This distininction is useful for later on if you want to add multiplayer,
+    // where often time these two ideas are not exactly synced up
     commands.spawn()
         .insert(Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5))
         .insert(ActiveEvents::COLLISION_EVENTS)
@@ -45,7 +50,7 @@ fn setup(mut commands: Commands) {
         .insert(LockedAxes::ROTATION_LOCKED)
         .insert(AdditionalMassProperties::Mass(1.0))
         .insert(GravityScale(0.0))
-        .insert(Ccd { enabled: true })
+        .insert(Ccd { enabled: true }) // Prevent clipping when going fast
         .insert(Transform::from_xyz(0.0, 3.0, 0.0))
         .insert(LogicalPlayer(0))
         .insert(FpsControllerInput {
