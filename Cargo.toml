@@ -1,7 +1,11 @@
 [package]
 name = "bevy_fps_controller"
-version = "0.1.0"
+version = "0.1.0-dev"
 edition = "2021"
+authors = ["bevy_fps_controller"]
+repository = "https://github.com/qhdwight/bevy_fps_controller"
+categories = ["game-engines"]
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 bevy = "0.8.0"
