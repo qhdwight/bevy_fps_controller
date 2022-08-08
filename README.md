@@ -19,3 +19,9 @@ Inspired from Source engine movement, this plugin implements movement suitable f
 ### Examples
 
 See [main.rs](./examples/minimal.rs)
+
+### Demo
+
+Used by my other project: https://github.com/qhdwight/voxel-game-rs
+
+https://user-images.githubusercontent.com/20666629/157115719-719a1e7b-a308-4239-919f-8daa9f2ef6e3.mp4
