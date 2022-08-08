@@ -7,6 +7,7 @@ repository = "https://github.com/qhdwight/bevy_fps_controller"
 categories = ["game-engines"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+description = "Bevy plugin that adds a Source engine inspired FPS movement controller"
 
 [dependencies]
 bevy = "0.8.0"
