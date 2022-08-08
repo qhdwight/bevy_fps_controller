@@ -6,4 +6,4 @@ Inspired from Source engine movement, this plugin implements movement suitable f
 
 ### Examples
 
-See [main.rs](./examples/minimal/src/main.rs)
+See [main.rs](./examples/minimal/main.rs)
