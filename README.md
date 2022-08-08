@@ -5,6 +5,16 @@
 
 Inspired from Source engine movement, this plugin implements movement suitable for FPS games.
 
+⚠️ Feedback requested! Still in early stages, feel free to make issues/PRs
+
+### Features
+* Air strafing
+* Bunny hopping (hold down jump)
+* Walking and sprinting
+* Noclip mode
+* Configurable settings
+* SOON: crouching
+
 ### Examples
 
 See [main.rs](./examples/minimal.rs)
