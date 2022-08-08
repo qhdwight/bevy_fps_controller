@@ -1,10 +1,7 @@
 use std::f32::consts::*;
 
-use bevy::{
-    math::Vec3Swizzles,
-    prelude::*,
-};
 use bevy::input::mouse::MouseMotion;
+use bevy::{math::Vec3Swizzles, prelude::*};
 use bevy_rapier3d::prelude::*;
 
 pub struct FpsControllerPlugin;
@@ -12,8 +9,7 @@ pub struct FpsControllerPlugin;
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
         // TODO: these need to be sequential (exclusive system set)
-        app
-            .add_system(fps_controller_input)
+        app.add_system(fps_controller_input)
             .add_system(fps_controller_look)
             .add_system(fps_controller_move)
             .add_system(fps_controller_render);
@@ -66,6 +62,7 @@ pub struct FpsController {
     pub ground_tick: u8,
     pub stop_speed: f32,
     pub sensitivity: f32,
+    pub enable_input: bool,
     pub key_forward: KeyCode,
     pub key_back: KeyCode,
     pub key_left: KeyCode,
@@ -102,6 +99,7 @@ impl Default for FpsController {
             ground_tick: 0,
             stop_speed: 1.0,
             jump_speed: 8.5,
+            enable_input: true,
             key_forward: KeyCode::W,
             key_back: KeyCode::S,
             key_left: KeyCode::A,
@@ -130,9 +128,12 @@ pub fn fps_controller_input(
     key_input: Res<Input<KeyCode>>,
     mut windows: ResMut<Windows>,
     mut mouse_events: EventReader<MouseMotion>,
-    mut query: Query<(&FpsController, &mut FpsControllerInput)>)
-{
+    mut query: Query<(&FpsController, &mut FpsControllerInput)>,
+) {
     for (controller, mut input) in query.iter_mut() {
+        if !controller.enable_input {
+            continue;
+        }
         let window = windows.get_primary_mut().unwrap();
         if window.is_focused() {
             let mut mouse_delta = Vec2::ZERO;
@@ -141,10 +142,8 @@ pub fn fps_controller_input(
             }
             mouse_delta *= controller.sensitivity;
 
-            input.pitch = (input.pitch - mouse_delta.y).clamp(
-                -FRAC_PI_2 + ANGLE_EPSILON,
-                FRAC_PI_2 - ANGLE_EPSILON,
-            );
+            input.pitch = (input.pitch - mouse_delta.y)
+                .clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
             input.yaw = input.yaw - mouse_delta.x;
         }
 
@@ -160,9 +159,7 @@ pub fn fps_controller_input(
     }
 }
 
-pub fn fps_controller_look(
-    mut query: Query<(&mut FpsController, &FpsControllerInput)>,
-) {
+pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerInput)>) {
     for (mut controller, input) in query.iter_mut() {
         controller.pitch = input.pitch;
         controller.yaw = input.yaw;
@@ -173,8 +170,12 @@ pub fn fps_controller_move(
     time: Res<Time>,
     physics_context: Res<RapierContext>,
     mut query: Query<(
-        Entity, &FpsControllerInput, &mut FpsController,
-        &Collider, &mut Transform, &mut Velocity
+        Entity,
+        &FpsControllerInput,
+        &mut FpsController,
+        &Collider,
+        &mut Transform,
+        &mut Velocity,
     )>,
 ) {
     let dt = time.delta_seconds();
@@ -183,7 +184,7 @@ pub fn fps_controller_move(
         if input.fly {
             controller.move_mode = match controller.move_mode {
                 MoveMode::Noclip => MoveMode::Ground,
-                MoveMode::Ground => MoveMode::Noclip
+                MoveMode::Ground => MoveMode::Noclip,
             }
         }
 
@@ -223,21 +224,32 @@ pub fn fps_controller_move(
                     // Capsule cast downwards to find ground
                     // Better than single raycast as it handles when you are near the edge of a surface
                     let mut ground_hit = None;
-                    let cast_capsule = Collider::capsule(capsule.segment.a.into(), capsule.segment.b.into(), capsule.radius * 1.0625);
+                    let cast_capsule = Collider::capsule(
+                        capsule.segment.a.into(),
+                        capsule.segment.b.into(),
+                        capsule.radius * 1.0625,
+                    );
                     let cast_velocity = Vec3::Y * -1.0;
                     let max_distance = 0.125;
                     // Avoid self collisions
                     let groups = QueryFilter::default().exclude_rigid_body(entity);
 
                     if let Some((_handle, hit)) = physics_context.cast_shape(
-                        position, orientation, cast_velocity, &cast_capsule, max_distance, groups,
+                        position,
+                        orientation,
+                        cast_velocity,
+                        &cast_capsule,
+                        max_distance,
+                        groups,
                     ) {
                         ground_hit = Some(hit);
                     }
 
-                    let mut wish_direction = input.movement.z * controller.forward_speed * forward + input.movement.x * controller.side_speed * right;
+                    let mut wish_direction = input.movement.z * controller.forward_speed * forward
+                        + input.movement.x * controller.side_speed * right;
                     let mut wish_speed = wish_direction.length();
-                    if wish_speed > 1e-6 { // Avoid division by zero
+                    if wish_speed > 1e-6 {
+                        // Avoid division by zero
                         wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
                     }
 
@@ -253,14 +265,26 @@ pub fn fps_controller_move(
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 {
                             if lateral_speed > controller.friction_cutoff {
-                                friction(lateral_speed, controller.friction, controller.stop_speed, dt, &mut end_velocity);
+                                friction(
+                                    lateral_speed,
+                                    controller.friction,
+                                    controller.stop_speed,
+                                    dt,
+                                    &mut end_velocity,
+                                );
                             } else {
                                 end_velocity.x = 0.0;
                                 end_velocity.z = 0.0;
                             }
                             end_velocity.y = 0.0;
                         }
-                        accelerate(wish_direction, wish_speed, controller.accel, dt, &mut end_velocity);
+                        accelerate(
+                            wish_direction,
+                            wish_speed,
+                            controller.accel,
+                            dt,
+                            &mut end_velocity,
+                        );
                         if input.jump {
                             // Simulate one update ahead, since this is an instant velocity change
                             start_velocity.y = controller.jump_speed;
@@ -271,7 +295,13 @@ pub fn fps_controller_move(
                     } else {
                         controller.ground_tick = 0;
                         wish_speed = f32::min(wish_speed, controller.air_speed_cap);
-                        accelerate(wish_direction, wish_speed, controller.air_acceleration, dt, &mut end_velocity);
+                        accelerate(
+                            wish_direction,
+                            wish_speed,
+                            controller.air_acceleration,
+                            dt,
+                            &mut end_velocity,
+                        );
                         end_velocity.y -= controller.gravity * dt;
                         let air_speed = end_velocity.xz().length();
                         if air_speed > controller.max_air_speed {
@@ -313,7 +343,9 @@ fn friction(lateral_speed: f32, friction: f32, stop_speed: f32, dt: f32, velocit
 fn accelerate(wish_dir: Vec3, wish_speed: f32, accel: f32, dt: f32, velocity: &mut Vec3) {
     let velocity_projection = Vec3::dot(*velocity, wish_dir);
     let add_speed = wish_speed - velocity_projection;
-    if add_speed <= 0.0 { return; }
+    if add_speed <= 0.0 {
+        return;
+    }
 
     let accel_speed = f32::min(accel * wish_speed * dt, add_speed);
     let wish_direction = wish_dir * accel_speed;
@@ -322,7 +354,11 @@ fn accelerate(wish_dir: Vec3, wish_speed: f32, accel: f32, dt: f32, velocity: &m
 }
 
 fn get_pressed(key_input: &Res<Input<KeyCode>>, key: KeyCode) -> f32 {
-    if key_input.pressed(key) { 1.0 } else { 0.0 }
+    if key_input.pressed(key) {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 fn get_axis(key_input: &Res<Input<KeyCode>>, key_pos: KeyCode, key_neg: KeyCode) -> f32 {
@@ -337,7 +373,10 @@ fn get_axis(key_input: &Res<Input<KeyCode>>, key_pos: KeyCode, key_neg: KeyCode)
 // ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝
 
 pub fn fps_controller_render(
-    logical_query: Query<(&Transform, &Collider, &FpsController, &LogicalPlayer), With<LogicalPlayer>>,
+    logical_query: Query<
+        (&Transform, &Collider, &FpsController, &LogicalPlayer),
+        With<LogicalPlayer>,
+    >,
     mut render_query: Query<(&mut Transform, &RenderPlayer), Without<LogicalPlayer>>,
 ) {
     // TODO: inefficient O(N^2) loop, use hash map?
@@ -349,7 +388,8 @@ pub fn fps_controller_render(
                 }
                 // TODO: let this be more configurable
                 let camera_height = capsule.segment().b().y + capsule.radius() * 0.75;
-                render_transform.translation = logical_transform.translation + Vec3::Y * camera_height;
+                render_transform.translation =
+                    logical_transform.translation + Vec3::Y * camera_height;
                 render_transform.rotation = look_quat(controller.pitch, controller.yaw);
             }
         }
