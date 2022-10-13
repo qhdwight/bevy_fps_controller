@@ -192,6 +192,7 @@ pub fn fps_controller_move(
         let right = orientation * Vec3::X;
         let forward = orientation * -Vec3::Z;
         let position = transform.translation;
+        let rotation = transform.rotation;
 
         match controller.move_mode {
             MoveMode::Noclip => {
@@ -227,7 +228,7 @@ pub fn fps_controller_move(
                     let cast_capsule = Collider::capsule(
                         capsule.segment.a.into(),
                         capsule.segment.b.into(),
-                        capsule.radius * 1.0625,
+                        capsule.radius * 0.90,
                     );
                     let cast_velocity = Vec3::Y * -1.0;
                     let max_distance = 0.125;
@@ -236,7 +237,7 @@ pub fn fps_controller_move(
 
                     if let Some((_handle, hit)) = physics_context.cast_shape(
                         position,
-                        orientation,
+                        rotation,
                         cast_velocity,
                         &cast_capsule,
                         max_distance,

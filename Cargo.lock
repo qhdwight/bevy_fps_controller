@@ -183,9 +183,9 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "bevy"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55f08528a4e59d607460513a823b40f602d013c1a00f57b824f1075d5d48c3cd"
+checksum = "fea147ef1ebb92d41294cfad804c40de151b174c711ce6e0a4a40eba23eae1a4"
 dependencies = [
  "bevy_internal",
 ]
@@ -367,7 +367,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_fps_controller"
-version = "0.1.1-dev"
+version = "0.1.2-dev"
 dependencies = [
  "bevy",
  "bevy_rapier3d",
@@ -551,9 +551,9 @@ checksum = "d92d5679e89602a18682a37846573dcd1979410179e14204280460ba9fb8713a"
 
 [[package]]
 name = "bevy_rapier3d"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6a7e920b88d792baddfd06a4429d9ecf018db7af4e5fc714b4a8b154d36fe9d"
+checksum = "e34cffd065dbb111fad1cdeac471690d1f4e17418973fd6be5a0c743497f5f72"
 dependencies = [
  "bevy",
  "bitflags",
@@ -2481,9 +2481,9 @@ dependencies = [
 
 [[package]]
 name = "parry3d"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89cd07f0e1e9e207662f430a4e758c357fdf89450a548ef1ce59113822fd5fa7"
+checksum = "a2420ecc938f3acf004ca7f5059aca5145324a88525879745e18ba6ea785d793"
 dependencies = [
  "approx",
  "arrayvec",
@@ -2610,9 +2610,9 @@ checksum = "63e935c45e09cc6dcf00d2f0b2d630a58f4095320223d47fc68918722f0538b6"
 
 [[package]]
 name = "rapier3d"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32f2decdbd39b70bfb3a5dc9e725ea0465b39401052cc8b03c0f81206f4b9129"
+checksum = "3393d49fd2b9a66cba62e45a778a59f73cbed56afff461a5dda32d3b630fd029"
 dependencies = [
  "approx",
  "arrayvec",

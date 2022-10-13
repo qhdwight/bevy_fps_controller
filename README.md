@@ -19,6 +19,9 @@ Inspired from Source engine movement, this plugin implements movement suitable f
 ### Examples
 
 See [main.rs](./examples/minimal.rs)
+```bash
+cargo run --example minimal
+```
 
 ### Demo
 
