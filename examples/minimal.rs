@@ -59,7 +59,7 @@ fn setup(
         AdditionalMassProperties::Mass(1.0),
         GravityScale(0.0),
         Ccd { enabled: true }, // Prevent clipping when going fast
-        Transform::from_xyz(0.0, 3.0, 0.0),
+        TransformBundle::from_transform(Transform::from_xyz(0.0, 3.0, 0.0)),
         LogicalPlayer(0),
         FpsControllerInput {
             pitch: -TAU / 12.0,
