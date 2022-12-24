@@ -375,7 +375,7 @@ pub fn fps_controller_move(
                     let crouch_height = controller.crouch_height;
                     let uncrouch_height = controller.uncrouch_height;
                     let height_dist = uncrouch_height - controller.player_height;
-                    let smooth = ((height_dist - (uncrouch_height - crouch_height) * 0.5) / ((uncrouch_height - crouch_height) * 0.5)).copysign(-1.0);
+                    let smooth = ((height_dist - (uncrouch_height - crouch_height) * 0.5) / ((uncrouch_height - crouch_height) * 0.5)).copysign(-1.0); // This is effectively to decelerate the movement at either end of the crouch, much like a "smoothstep"
 
                     if input.crouch {
                         controller.player_height -= dt * controller.crouch_speed + smooth * (controller.crouch_speed - 0.4) * dt; 
