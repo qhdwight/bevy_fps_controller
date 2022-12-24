@@ -374,11 +374,13 @@ pub fn fps_controller_move(
                     controller.player_height = capsule.segment.b.y;
                     let crouch_height = controller.crouch_height;
                     let uncrouch_height = controller.uncrouch_height;
+                    let height_dist = uncrouch_height - controller.player_height;
+                    let smooth = ((height_dist - (uncrouch_height - crouch_height) * 0.5) / ((uncrouch_height - crouch_height) * 0.5)).copysign(-1.0);
 
                     if input.crouch {
-                        controller.player_height -= dt * controller.crouch_speed; 
+                        controller.player_height -= dt * controller.crouch_speed + smooth * (controller.crouch_speed - 0.4) * dt; 
                     } else {
-                        controller.player_height += dt * controller.uncrouch_speed;
+                        controller.player_height += dt * controller.uncrouch_speed + smooth * (controller.uncrouch_speed - 0.4) * dt;
                     }
 
                     controller.player_height = controller.player_height.clamp(crouch_height, uncrouch_height);
