@@ -54,6 +54,12 @@ pub struct FpsController {
     pub friction_cutoff: f32,
     pub jump_speed: f32,
     pub fly_speed: f32,
+    pub crouched_speed: f32,
+    pub crouch_speed: f32,
+    pub uncrouch_speed: f32,
+    pub crouch_height: f32,
+    pub uncrouch_height: f32,
+    pub player_height: f32,
     pub fast_fly_speed: f32,
     pub fly_friction: f32,
     pub pitch: f32,
@@ -89,6 +95,12 @@ impl Default for FpsController {
             air_speed_cap: 2.0,
             air_acceleration: 20.0,
             max_air_speed: 8.0,
+            crouched_speed: 5.0,
+            crouch_speed: 6.0,
+            uncrouch_speed: 8.0,
+            crouch_height: 0.7,
+            uncrouch_height: 1.5,
+            player_height: 1.5,
             accel: 10.0,
             friction: 10.0,
             friction_cutoff: 0.1,
@@ -167,6 +179,7 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 }
 
 pub fn fps_controller_move(
+    mut commands: Commands,
     time: Res<Time>,
     physics_context: Res<RapierContext>,
     mut query: Query<(
@@ -254,7 +267,9 @@ pub fn fps_controller_move(
                         wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
                     }
 
-                    let max_speed = if input.sprint {
+                    let max_speed = if input.crouch {
+                        controller.crouched_speed
+                    } else if input.sprint {
                         controller.run_speed
                     } else {
                         controller.walk_speed
@@ -323,6 +338,23 @@ pub fn fps_controller_move(
 
                     controller.velocity = end_velocity;
                     velocity.linvel = (start_velocity + end_velocity) * 0.5;
+                    
+                    // Crouch logic
+
+                    controller.player_height = capsule.segment.b.y;
+                    let crouch_height = controller.crouch_height;
+                    let uncrouch_height = controller.uncrouch_height;
+
+                    if input.crouch {
+                        controller.player_height -= dt * controller.crouch_speed; 
+                    } else {
+                        controller.player_height += dt * controller.uncrouch_speed;
+                    }
+
+                    controller.player_height = controller.player_height.clamp(crouch_height, uncrouch_height);
+
+                    commands.entity(entity).remove::<Collider>();
+                    commands.entity(entity).insert(Collider::capsule(Vec3::Y * 0.5, Vec3::Y * controller.player_height, 0.5));
                 }
             }
         }
