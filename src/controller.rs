@@ -16,6 +16,7 @@ impl Plugin for FpsControllerPlugin {
     }
 }
 
+#[derive(PartialEq)]
 pub enum MoveMode {
     Noclip,
     Ground,
@@ -188,9 +189,13 @@ pub fn fps_controller_move(
             }
         }
 
-        let y_orientation = Quat::from_axis_angle(Vec3::Y, input.yaw);
-        let right = y_orientation * Vec3::X;
-        let forward = y_orientation * -Vec3::Z;
+        let orientation = if controller.move_mode == MoveMode::Noclip {
+            look_quat(input.pitch, input.yaw)
+        } else {
+            Quat::from_axis_angle(Vec3::Y, input.yaw)
+        };
+        let right = orientation * Vec3::X;
+        let forward = orientation * -Vec3::Z;
         let position = transform.translation;
         let rotation = transform.rotation;
 
