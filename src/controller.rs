@@ -1,7 +1,7 @@
 use std::f32::consts::*;
 
-use bevy::input::mouse::MouseMotion;
 use bevy::{math::Vec3Swizzles, prelude::*};
+use bevy::input::mouse::MouseMotion;
 use bevy_rapier3d::prelude::*;
 
 pub struct FpsControllerPlugin;
@@ -16,6 +16,7 @@ impl Plugin for FpsControllerPlugin {
     }
 }
 
+#[derive(PartialEq)]
 pub enum MoveMode {
     Noclip,
     Ground,
@@ -188,7 +189,11 @@ pub fn fps_controller_move(
             }
         }
 
-        let orientation = look_quat(input.pitch, input.yaw);
+        let orientation = if controller.move_mode == MoveMode::Noclip {
+            look_quat(input.pitch, input.yaw)
+        } else {
+            Quat::from_axis_angle(Vec3::Y, input.yaw)
+        };
         let right = orientation * Vec3::X;
         let forward = orientation * -Vec3::Z;
         let position = transform.translation;

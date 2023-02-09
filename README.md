@@ -23,6 +23,49 @@ See [main.rs](./examples/minimal.rs)
 cargo run --example minimal
 ```
 
+```rust
+use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
+
+use bevy_fps_controller::controller::*;
+
+fn main() {
+    App::new()
+        ...
+        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugin(FpsControllerPlugin)
+        ...
+}
+
+fn setup(...) {
+    ...
+    commands.spawn((
+        Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
+        ActiveEvents::COLLISION_EVENTS,
+        Velocity::zero(),
+        RigidBody::Dynamic,
+        Sleeping::disabled(),
+        LockedAxes::ROTATION_LOCKED,
+        AdditionalMassProperties::Mass(1.0),
+        GravityScale(0.0),
+        Ccd { enabled: true }, // Prevent clipping when going fast
+        TransformBundle::from_transform(Transform::from_xyz(0.0, 3.0, 0.0)),
+        LogicalPlayer(0),
+        FpsControllerInput {
+            pitch: -TAU / 12.0,
+            yaw: TAU * 5.0 / 8.0,
+            ..default()
+        },
+        FpsController { ..default() }
+    ));
+    commands.spawn((
+        Camera3dBundle::default(),
+        RenderPlayer(0),
+    ));
+    ...
+}
+```
+
 ### Demo
 
 Used by my other project: https://github.com/qhdwight/voxel-game-rs
