@@ -1,18 +1,31 @@
 use std::f32::consts::*;
 
-use bevy::{math::Vec3Swizzles, prelude::*};
-use bevy::input::mouse::MouseMotion;
+use bevy::{
+    input::mouse::MouseMotion,
+    math::Vec3Swizzles,
+    prelude::*,
+};
 use bevy_rapier3d::prelude::*;
 
 pub struct FpsControllerPlugin;
 
+#[derive(SystemLabel)]
+enum FpsSystemLabel {
+    Input,
+    Look,
+    Move,
+    Render,
+}
+
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        // TODO: these need to be sequential (exclusive system set)
-        app.add_system(fps_controller_input)
-            .add_system(fps_controller_look)
-            .add_system(fps_controller_move)
-            .add_system(fps_controller_render);
+        // TODO: use system piping instead?
+        app.add_system_set(SystemSet::new()
+            .with_system(fps_controller_input.label(FpsSystemLabel::Input))
+            .with_system(fps_controller_look.label(FpsSystemLabel::Look).after(FpsSystemLabel::Input))
+            .with_system(fps_controller_move.label(FpsSystemLabel::Move).after(FpsSystemLabel::Look))
+            .with_system(fps_controller_render.label(FpsSystemLabel::Render).after(FpsSystemLabel::Move))
+        );
     }
 }
 
@@ -52,7 +65,10 @@ pub struct FpsController {
     pub max_air_speed: f32,
     pub accel: f32,
     pub friction: f32,
-    pub friction_cutoff: f32,
+    /// If the dot product of the normal of the surface and the upward vector,
+    /// which is a value from [-1, 1], is greater than this value, friction will be applied
+    pub friction_normal_cutoff: f32,
+    pub friction_speed_cutoff: f32,
     pub jump_speed: f32,
     pub fly_speed: f32,
     pub fast_fly_speed: f32,
@@ -83,16 +99,17 @@ impl Default for FpsController {
             fly_speed: 10.0,
             fast_fly_speed: 30.0,
             gravity: 23.0,
-            walk_speed: 10.0,
-            run_speed: 30.0,
+            walk_speed: 9.0,
+            run_speed: 14.0,
             forward_speed: 30.0,
             side_speed: 30.0,
             air_speed_cap: 2.0,
             air_acceleration: 20.0,
-            max_air_speed: 8.0,
+            max_air_speed: 15.0,
             accel: 10.0,
             friction: 10.0,
-            friction_cutoff: 0.1,
+            friction_normal_cutoff: 0.7,
+            friction_speed_cutoff: 0.1,
             fly_friction: 0.5,
             pitch: 0.0,
             yaw: 0.0,
@@ -267,10 +284,17 @@ pub fn fps_controller_move(
 
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if let Some(_ground_hit) = ground_hit {
+                    let apply_friction = ground_hit.map(|hit| {
+                        // "dot" will be [-1, 1] and tells us how aligned we are with the surface normal
+                        // A value close to 1 means we are on flat ground
+                        let dot = Vec3::dot(hit.normal1, Vec3::Y);
+                        dot > controller.friction_normal_cutoff
+                    }).unwrap_or(false);
+
+                    if apply_friction {
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 {
-                            if lateral_speed > controller.friction_cutoff {
+                            if lateral_speed > controller.friction_speed_cutoff {
                                 friction(
                                     lateral_speed,
                                     controller.friction,
@@ -317,6 +341,7 @@ pub fn fps_controller_move(
                         }
                     }
 
+                    // TODO: try to add this in
                     // At this point our collider may be intersecting with the ground
                     // Fix up our collider by offsetting it to be flush with the ground
                     // if end_vel.y < -1e6 {

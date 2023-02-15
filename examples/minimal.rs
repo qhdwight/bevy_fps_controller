@@ -1,7 +1,9 @@
 use std::f32::consts::TAU;
 
-use bevy::prelude::*;
-use bevy::window::CursorGrabMode;
+use bevy::{
+    prelude::*,
+    window::CursorGrabMode,
+};
 use bevy_rapier3d::prelude::*;
 
 use bevy_fps_controller::controller::*;
@@ -12,7 +14,7 @@ fn main() {
             color: Color::WHITE,
             brightness: 0.25,
         })
-        .insert_resource(ClearColor(Color::rgb(0.752, 0.992, 0.984)))
+        .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             window: WindowDescriptor {
@@ -51,6 +53,14 @@ fn setup(
     // where often time these two ideas are not exactly synced up
     commands.spawn((
         Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
+        Friction {
+            coefficient: 0.0,
+            combine_rule: CoefficientCombineRule::Min,
+        },
+        Restitution {
+            coefficient: 0.0,
+            combine_rule: CoefficientCombineRule::Min,
+        },
         ActiveEvents::COLLISION_EVENTS,
         Velocity::zero(),
         RigidBody::Dynamic,
@@ -73,9 +83,9 @@ fn setup(
         RenderPlayer(0),
     ));
 
-    // World
-    commands.spawn_empty()
-        .insert(PbrBundle {
+    // Floor
+    commands.spawn((
+        PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Box {
                 min_x: -20.0,
                 max_x: 20.0,
@@ -85,18 +95,39 @@ fn setup(
                 max_z: 20.0,
             })),
             material: materials.add(StandardMaterial {
-                base_color: Color::hex("E6EED6").unwrap(),
+                base_color: Color::hex("8C9A9E").unwrap(),
                 ..default()
             }),
-            transform: Transform::IDENTITY,
+            transform: Transform::from_xyz(0.0, -0.25, 0.0),
             ..default()
-        })
-        .insert(Collider::cuboid(20.0, 0.25, 20.0))
-        .insert(RigidBody::Fixed)
-        .insert(Transform::IDENTITY);
+        },
+        Collider::cuboid(20.0, 0.25, 20.0),
+        RigidBody::Fixed,
+    ));
 
-    commands.spawn_empty()
-        .insert(PbrBundle {
+    let material = materials.add(StandardMaterial {
+        base_color: Color::hex("747578").unwrap(),
+        ..default()
+    });
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Box {
+                min_x: -1.0,
+                max_x: 1.0,
+                min_y: -0.5,
+                max_y: 0.5,
+                min_z: -1.0,
+                max_z: 1.0,
+            })),
+            material: material.clone(),
+            transform: Transform::from_xyz(4.0, 0.5, 4.0),
+            ..default()
+        },
+        Collider::cuboid(1.0, 1.0, 1.0),
+        RigidBody::Fixed,
+    ));
+    commands.spawn((
+        PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Box {
                 min_x: -1.0,
                 max_x: 1.0,
@@ -105,16 +136,13 @@ fn setup(
                 min_z: -1.0,
                 max_z: 1.0,
             })),
-            material: materials.add(StandardMaterial {
-                base_color: Color::hex("DDE2C6").unwrap(),
-                ..default()
-            }),
-            transform: Transform::IDENTITY,
+            material: material.clone(),
+            transform: Transform::from_xyz(2.0, 1.0, 4.0),
             ..default()
-        })
-        .insert(Collider::cuboid(1.0, 1.0, 1.0))
-        .insert(RigidBody::Fixed)
-        .insert(Transform::from_xyz(4.0, 1.0, 4.0));
+        },
+        Collider::cuboid(1.0, 2.0, 1.0),
+        RigidBody::Fixed,
+    ));
 }
 
 pub fn manage_cursor(
