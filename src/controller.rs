@@ -1,18 +1,31 @@
 use std::f32::consts::*;
 
-use bevy::{math::Vec3Swizzles, prelude::*};
-use bevy::input::mouse::MouseMotion;
+use bevy::{
+    input::mouse::MouseMotion,
+    math::Vec3Swizzles,
+    prelude::*,
+};
 use bevy_rapier3d::prelude::*;
 
 pub struct FpsControllerPlugin;
 
+#[derive(SystemLabel)]
+enum FpsSystemLabel {
+    Input,
+    Look,
+    Move,
+    Render,
+}
+
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        // TODO: these need to be sequential (exclusive system set)
-        app.add_system(fps_controller_input)
-            .add_system(fps_controller_look)
-            .add_system(fps_controller_move)
-            .add_system(fps_controller_render);
+        // TODO: use system piping instead?
+        app.add_system_set(SystemSet::new()
+            .with_system(fps_controller_input.label(FpsSystemLabel::Input))
+            .with_system(fps_controller_look.label(FpsSystemLabel::Look).after(FpsSystemLabel::Input))
+            .with_system(fps_controller_move.label(FpsSystemLabel::Move).after(FpsSystemLabel::Look))
+            .with_system(fps_controller_render.label(FpsSystemLabel::Render).after(FpsSystemLabel::Move))
+        );
     }
 }
 
@@ -42,6 +55,7 @@ pub struct FpsControllerInput {
 #[derive(Component)]
 pub struct FpsController {
     pub move_mode: MoveMode,
+    pub radius: f32,
     pub gravity: f32,
     pub walk_speed: f32,
     pub run_speed: f32,
@@ -50,11 +64,20 @@ pub struct FpsController {
     pub air_speed_cap: f32,
     pub air_acceleration: f32,
     pub max_air_speed: f32,
-    pub accel: f32,
+    pub acceleration: f32,
     pub friction: f32,
-    pub friction_cutoff: f32,
+    /// If the dot product of the normal of the surface and the upward vector,
+    /// which is a value from [-1, 1], is greater than this value, friction will be applied
+    pub friction_normal_cutoff: f32,
+    pub friction_speed_cutoff: f32,
     pub jump_speed: f32,
     pub fly_speed: f32,
+    pub crouched_speed: f32,
+    pub crouch_speed: f32,
+    pub uncrouch_speed: f32,
+    pub height: f32,
+    pub upright_height: f32,
+    pub crouch_height: f32,
     pub fast_fly_speed: f32,
     pub fly_friction: f32,
     pub pitch: f32,
@@ -80,19 +103,27 @@ impl Default for FpsController {
     fn default() -> Self {
         Self {
             move_mode: MoveMode::Ground,
+            radius: 0.5,
             fly_speed: 10.0,
             fast_fly_speed: 30.0,
             gravity: 23.0,
-            walk_speed: 10.0,
-            run_speed: 30.0,
+            walk_speed: 9.0,
+            run_speed: 14.0,
             forward_speed: 30.0,
             side_speed: 30.0,
             air_speed_cap: 2.0,
             air_acceleration: 20.0,
-            max_air_speed: 8.0,
-            accel: 10.0,
+            max_air_speed: 15.0,
+            crouched_speed: 5.0,
+            crouch_speed: 6.0,
+            uncrouch_speed: 8.0,
+            height: 1.5,
+            upright_height: 2.0,
+            crouch_height: 1.25,
+            acceleration: 10.0,
             friction: 10.0,
-            friction_cutoff: 0.1,
+            friction_normal_cutoff: 0.7,
+            friction_speed_cutoff: 0.1,
             fly_friction: 0.5,
             pitch: 0.0,
             yaw: 0.0,
@@ -174,14 +205,14 @@ pub fn fps_controller_move(
         Entity,
         &FpsControllerInput,
         &mut FpsController,
-        &Collider,
+        &mut Collider,
         &mut Transform,
         &mut Velocity,
     )>,
 ) {
     let dt = time.delta_seconds();
 
-    for (entity, input, mut controller, collider, transform, mut velocity) in query.iter_mut() {
+    for (entity, input, mut controller, mut collider, transform, mut velocity) in query.iter_mut() {
         if input.fly {
             controller.move_mode = match controller.move_mode {
                 MoveMode::Noclip => MoveMode::Ground,
@@ -233,20 +264,17 @@ pub fn fps_controller_move(
                     let cast_capsule = Collider::capsule(
                         capsule.segment.a.into(),
                         capsule.segment.b.into(),
-                        capsule.radius * 0.90,
+                        capsule.radius * 0.9375,
                     );
-                    let cast_velocity = Vec3::Y * -1.0;
-                    let max_distance = 0.125;
                     // Avoid self collisions
-                    let groups = QueryFilter::default().exclude_rigid_body(entity);
-
+                    let cast_groups = QueryFilter::default().exclude_rigid_body(entity);
                     if let Some((_handle, hit)) = physics_context.cast_shape(
                         position,
                         rotation,
-                        cast_velocity,
+                        -Vec3::Y,
                         &cast_capsule,
-                        max_distance,
-                        groups,
+                        0.125,
+                        cast_groups,
                     ) {
                         ground_hit = Some(hit);
                     }
@@ -259,7 +287,9 @@ pub fn fps_controller_move(
                         wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
                     }
 
-                    let max_speed = if input.sprint {
+                    let max_speed = if input.crouch {
+                        controller.crouched_speed
+                    } else if input.sprint {
                         controller.run_speed
                     } else {
                         controller.walk_speed
@@ -267,10 +297,17 @@ pub fn fps_controller_move(
 
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if let Some(_ground_hit) = ground_hit {
+                    let apply_friction = ground_hit.map(|hit| {
+                        // "dot" will be [-1, 1] and tells us how aligned we are with the surface normal
+                        // A value close to 1 means we are on flat ground
+                        let dot = Vec3::dot(hit.normal1, Vec3::Y);
+                        dot > controller.friction_normal_cutoff
+                    }).unwrap_or(false);
+
+                    if apply_friction {
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 {
-                            if lateral_speed > controller.friction_cutoff {
+                            if lateral_speed > controller.friction_speed_cutoff {
                                 friction(
                                     lateral_speed,
                                     controller.friction,
@@ -287,7 +324,7 @@ pub fn fps_controller_move(
                         accelerate(
                             wish_direction,
                             wish_speed,
-                            controller.accel,
+                            controller.acceleration,
                             dt,
                             &mut end_velocity,
                         );
@@ -317,6 +354,7 @@ pub fn fps_controller_move(
                         }
                     }
 
+                    // TODO: try to add this in
                     // At this point our collider may be intersecting with the ground
                     // Fix up our collider by offsetting it to be flush with the ground
                     // if end_vel.y < -1e6 {
@@ -326,8 +364,44 @@ pub fn fps_controller_move(
                     //     }
                     // }
 
+                    let crouch_height = controller.crouch_height;
+                    let upright_height = controller.upright_height;
+
+                    let crouch_speed = if input.crouch {
+                        -controller.crouch_speed
+                    } else {
+                        controller.uncrouch_speed
+                    };
+                    controller.height += dt * crouch_speed;
+                    controller.height = controller.height.clamp(crouch_height, upright_height);
+
+                    if let Some(mut capsule) = collider.as_capsule_mut() {
+                        capsule.set_segment(
+                            Vec3::Y * 0.5,
+                            Vec3::Y * controller.height,
+                        );
+                    }
+
+                    let mut motion = (start_velocity + end_velocity) * 0.5;
+
+                    // Prevent falling off of ledges
+                    // TODO: instead of setting to zero subtract out the part that would make us fall
+                    if input.crouch && ground_hit.is_some() && physics_context.cast_shape(
+                        position + Vec3::new(motion.x, 0.0, motion.z) * dt,
+                        rotation,
+                        -Vec3::Y,
+                        &cast_capsule,
+                        0.125,
+                        cast_groups,
+                    ).is_none() {
+                        motion.x = 0.0;
+                        motion.z = 0.0;
+                        end_velocity.x = 0.0;
+                        end_velocity.z = 0.0;
+                    }
+
                     controller.velocity = end_velocity;
-                    velocity.linvel = (start_velocity + end_velocity) * 0.5;
+                    velocity.linvel = motion;
                 }
             }
         }
