@@ -55,6 +55,7 @@ pub struct FpsControllerInput {
 #[derive(Component)]
 pub struct FpsController {
     pub move_mode: MoveMode,
+    pub radius: f32,
     pub gravity: f32,
     pub walk_speed: f32,
     pub run_speed: f32,
@@ -63,7 +64,7 @@ pub struct FpsController {
     pub air_speed_cap: f32,
     pub air_acceleration: f32,
     pub max_air_speed: f32,
-    pub accel: f32,
+    pub acceleration: f32,
     pub friction: f32,
     /// If the dot product of the normal of the surface and the upward vector,
     /// which is a value from [-1, 1], is greater than this value, friction will be applied
@@ -74,9 +75,9 @@ pub struct FpsController {
     pub crouched_speed: f32,
     pub crouch_speed: f32,
     pub uncrouch_speed: f32,
+    pub height: f32,
+    pub upright_height: f32,
     pub crouch_height: f32,
-    pub uncrouch_height: f32,
-    pub player_height: f32,
     pub fast_fly_speed: f32,
     pub fly_friction: f32,
     pub pitch: f32,
@@ -102,6 +103,7 @@ impl Default for FpsController {
     fn default() -> Self {
         Self {
             move_mode: MoveMode::Ground,
+            radius: 0.5,
             fly_speed: 10.0,
             fast_fly_speed: 30.0,
             gravity: 23.0,
@@ -115,10 +117,10 @@ impl Default for FpsController {
             crouched_speed: 5.0,
             crouch_speed: 6.0,
             uncrouch_speed: 8.0,
-            crouch_height: 0.7,
-            uncrouch_height: 1.5,
-            player_height: 1.5,
-            accel: 10.0,
+            height: 1.5,
+            upright_height: 2.0,
+            crouch_height: 1.25,
+            acceleration: 10.0,
             friction: 10.0,
             friction_normal_cutoff: 0.7,
             friction_speed_cutoff: 0.1,
@@ -197,21 +199,20 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 }
 
 pub fn fps_controller_move(
-    mut commands: Commands,
     time: Res<Time>,
     physics_context: Res<RapierContext>,
     mut query: Query<(
         Entity,
         &FpsControllerInput,
         &mut FpsController,
-        &Collider,
+        &mut Collider,
         &mut Transform,
         &mut Velocity,
     )>,
 ) {
     let dt = time.delta_seconds();
 
-    for (entity, input, mut controller, collider, transform, mut velocity) in query.iter_mut() {
+    for (entity, input, mut controller, mut collider, transform, mut velocity) in query.iter_mut() {
         if input.fly {
             controller.move_mode = match controller.move_mode {
                 MoveMode::Noclip => MoveMode::Ground,
@@ -263,20 +264,17 @@ pub fn fps_controller_move(
                     let cast_capsule = Collider::capsule(
                         capsule.segment.a.into(),
                         capsule.segment.b.into(),
-                        capsule.radius * 0.90,
+                        capsule.radius * 0.9375,
                     );
-                    let cast_velocity = Vec3::Y * -1.0;
-                    let max_distance = 0.125;
                     // Avoid self collisions
-                    let groups = QueryFilter::default().exclude_rigid_body(entity);
-
+                    let cast_groups = QueryFilter::default().exclude_rigid_body(entity);
                     if let Some((_handle, hit)) = physics_context.cast_shape(
                         position,
                         rotation,
-                        cast_velocity,
+                        -Vec3::Y,
                         &cast_capsule,
-                        max_distance,
-                        groups,
+                        0.125,
+                        cast_groups,
                     ) {
                         ground_hit = Some(hit);
                     }
@@ -326,7 +324,7 @@ pub fn fps_controller_move(
                         accelerate(
                             wish_direction,
                             wish_speed,
-                            controller.accel,
+                            controller.acceleration,
                             dt,
                             &mut end_velocity,
                         );
@@ -366,27 +364,44 @@ pub fn fps_controller_move(
                     //     }
                     // }
 
-                    controller.velocity = end_velocity;
-                    velocity.linvel = (start_velocity + end_velocity) * 0.5;
-                    
-                    // Crouch logic
-
-                    controller.player_height = capsule.segment.b.y;
                     let crouch_height = controller.crouch_height;
-                    let uncrouch_height = controller.uncrouch_height;
-                    let height_dist = uncrouch_height - controller.player_height;
-                    let smooth = ((height_dist - (uncrouch_height - crouch_height) * 0.5) / ((uncrouch_height - crouch_height) * 0.5)).copysign(-1.0); // This is effectively to decelerate the movement at either end of the crouch, much like a "smoothstep"
+                    let upright_height = controller.upright_height;
 
-                    if input.crouch {
-                        controller.player_height -= dt * controller.crouch_speed + smooth * (controller.crouch_speed - 0.4) * dt; 
+                    let crouch_speed = if input.crouch {
+                        -controller.crouch_speed
                     } else {
-                        controller.player_height += dt * controller.uncrouch_speed + smooth * (controller.uncrouch_speed - 0.4) * dt;
+                        controller.uncrouch_speed
+                    };
+                    controller.height += dt * crouch_speed;
+                    controller.height = controller.height.clamp(crouch_height, upright_height);
+
+                    if let Some(mut capsule) = collider.as_capsule_mut() {
+                        capsule.set_segment(
+                            Vec3::Y * 0.5,
+                            Vec3::Y * controller.height,
+                        );
                     }
 
-                    controller.player_height = controller.player_height.clamp(crouch_height, uncrouch_height);
+                    let mut motion = (start_velocity + end_velocity) * 0.5;
 
-                    commands.entity(entity).remove::<Collider>();
-                    commands.entity(entity).insert(Collider::capsule(Vec3::Y * 0.5, Vec3::Y * controller.player_height, 0.5));
+                    // Prevent falling off of ledges
+                    // TODO: instead of setting to zero subtract out the part that would make us fall
+                    if input.crouch && ground_hit.is_some() && physics_context.cast_shape(
+                        position + Vec3::new(motion.x, 0.0, motion.z) * dt,
+                        rotation,
+                        -Vec3::Y,
+                        &cast_capsule,
+                        0.125,
+                        cast_groups,
+                    ).is_none() {
+                        motion.x = 0.0;
+                        motion.z = 0.0;
+                        end_velocity.x = 0.0;
+                        end_velocity.z = 0.0;
+                    }
+
+                    controller.velocity = end_velocity;
+                    velocity.linvel = motion;
                 }
             }
         }
