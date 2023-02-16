@@ -297,16 +297,13 @@ pub fn fps_controller_move(
 
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    let apply_friction = ground_hit.map(|hit| {
-                        // "dot" will be [-1, 1] and tells us how aligned we are with the surface normal
-                        // A value close to 1 means we are on flat ground
-                        let dot = Vec3::dot(hit.normal1, Vec3::Y);
-                        dot > controller.friction_normal_cutoff
-                    }).unwrap_or(false);
-
-                    if apply_friction {
+                    if let Some(hit) = ground_hit {
+                        let is_flat_ground = controller.ground_tick >= 1 && {
+                            let dot = Vec3::dot(hit.normal1, Vec3::Y);
+                            dot > controller.friction_normal_cutoff
+                        };
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
-                        if controller.ground_tick >= 1 {
+                        if controller.ground_tick >= 1 && is_flat_ground {
                             if lateral_speed > controller.friction_speed_cutoff {
                                 friction(
                                     lateral_speed,
@@ -328,7 +325,7 @@ pub fn fps_controller_move(
                             dt,
                             &mut end_velocity,
                         );
-                        if input.jump {
+                        if input.jump && is_flat_ground {
                             // Simulate one update ahead, since this is an instant velocity change
                             start_velocity.y = controller.jump_speed;
                             end_velocity.y = start_velocity.y - controller.gravity * dt;

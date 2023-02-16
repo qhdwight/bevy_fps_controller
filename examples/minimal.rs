@@ -1,6 +1,8 @@
 use std::f32::consts::TAU;
 
 use bevy::{
+    gltf::{GltfMesh, GltfNode},
+    gltf::Gltf,
     prelude::*,
     window::CursorGrabMode,
 };
@@ -8,11 +10,13 @@ use bevy_rapier3d::prelude::*;
 
 use bevy_fps_controller::controller::*;
 
+const SPAWN_POINT: Vec3 = Vec3::new(0.0, 0.1, 8.0);
+
 fn main() {
     App::new()
         .insert_resource(AmbientLight {
             color: Color::WHITE,
-            brightness: 0.25,
+            brightness: 0.5,
         })
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
@@ -28,21 +32,22 @@ fn main() {
         .add_plugin(FpsControllerPlugin)
         .add_startup_system(setup)
         .add_system(manage_cursor)
+        .add_system(scene_colliders)
+        .add_system(respawn)
         .run();
 }
 
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    assets: Res<AssetServer>,
 ) {
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
-            illuminance: 2000.0,
+            illuminance: 6000.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(-38.0, 40.0, 34.0),
+        transform: Transform::from_xyz(4.0, 7.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
 
@@ -69,7 +74,7 @@ fn setup(
         AdditionalMassProperties::Mass(1.0),
         GravityScale(0.0),
         Ccd { enabled: true }, // Prevent clipping when going fast
-        TransformBundle::from_transform(Transform::from_xyz(0.0, 3.0, 0.0)),
+        TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
         LogicalPlayer(0),
         FpsControllerInput {
             pitch: -TAU / 12.0,
@@ -83,66 +88,67 @@ fn setup(
         RenderPlayer(0),
     ));
 
-    // Floor
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Box {
-                min_x: -20.0,
-                max_x: 20.0,
-                min_y: -0.25,
-                max_y: 0.25,
-                min_z: -20.0,
-                max_z: 20.0,
-            })),
-            material: materials.add(StandardMaterial {
-                base_color: Color::hex("8C9A9E").unwrap(),
-                ..default()
-            }),
-            transform: Transform::from_xyz(0.0, -0.25, 0.0),
-            ..default()
-        },
-        Collider::cuboid(20.0, 0.25, 20.0),
-        RigidBody::Fixed,
-    ));
-
-    let material = materials.add(StandardMaterial {
-        base_color: Color::hex("747578").unwrap(),
-        ..default()
+    commands.insert_resource(MainScene {
+        handle: assets.load("playground.glb"),
+        is_loaded: false,
     });
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Box {
-                min_x: -1.0,
-                max_x: 1.0,
-                min_y: -0.5,
-                max_y: 0.5,
-                min_z: -1.0,
-                max_z: 1.0,
-            })),
-            material: material.clone(),
-            transform: Transform::from_xyz(4.0, 0.5, 4.0),
+}
+
+fn respawn(
+    mut query: Query<(&mut Transform, &mut FpsController)>,
+) {
+    for (mut transform, mut controller) in &mut query {
+        if transform.translation.y > -50.0 {
+            continue;
+        }
+
+        controller.velocity = Vec3::ZERO;
+        transform.translation = SPAWN_POINT;
+    }
+}
+
+#[derive(Resource)]
+struct MainScene {
+    handle: Handle<Gltf>,
+    is_loaded: bool,
+}
+
+fn scene_colliders(
+    mut commands: Commands,
+    mut main_scene: ResMut<MainScene>,
+    gltf_assets: Res<Assets<Gltf>>,
+    gltf_mesh_assets: Res<Assets<GltfMesh>>,
+    gltf_node_assets: Res<Assets<GltfNode>>,
+    mesh_assets: Res<Assets<Mesh>>,
+) {
+    if main_scene.is_loaded {
+        return;
+    }
+
+    let gltf = gltf_assets.get(&main_scene.handle);
+
+    if let Some(gltf) = gltf {
+        let scene = gltf.scenes.first().unwrap().clone();
+        commands.spawn(SceneBundle {
+            scene,
             ..default()
-        },
-        Collider::cuboid(1.0, 1.0, 1.0),
-        RigidBody::Fixed,
-    ));
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Box {
-                min_x: -1.0,
-                max_x: 1.0,
-                min_y: -1.0,
-                max_y: 1.0,
-                min_z: -1.0,
-                max_z: 1.0,
-            })),
-            material: material.clone(),
-            transform: Transform::from_xyz(2.0, 1.0, 4.0),
-            ..default()
-        },
-        Collider::cuboid(1.0, 2.0, 1.0),
-        RigidBody::Fixed,
-    ));
+        });
+        for node in &gltf.nodes {
+            let node = gltf_node_assets.get(&node).unwrap();
+            if let Some(gltf_mesh) = node.mesh.clone() {
+                let gltf_mesh = gltf_mesh_assets.get(&gltf_mesh).unwrap();
+                for mesh_primitive in &gltf_mesh.primitives {
+                    let mesh = mesh_assets.get(&mesh_primitive.mesh).unwrap();
+                    commands.spawn((
+                        Collider::from_bevy_mesh(mesh, &ComputedColliderShape::TriMesh).unwrap(),
+                        RigidBody::Fixed,
+                        TransformBundle::from_transform(node.transform),
+                    ));
+                }
+            }
+        }
+        main_scene.is_loaded = true;
+    }
 }
 
 pub fn manage_cursor(

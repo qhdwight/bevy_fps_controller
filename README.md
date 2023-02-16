@@ -9,16 +9,15 @@ Inspired from Source engine movement, this plugin implements movement suitable f
 
 ### Features
 
-* Air strafing
-* Bunny hopping (hold down jump)
-* Sprinting
+* Air strafing and bunny hopping (hold down jump key)
+* Crouching, sprinting
 * Noclip mode
 * Configurable settings
-* SOON: crouching, walking
 
 ### Examples
 
 See [main.rs](./examples/minimal.rs)
+
 ```bash
 cargo run --example minimal
 ```
@@ -39,25 +38,25 @@ fn main() {
 
 fn setup(...) {
     ...
-    commands.spawn((
-        Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
-        ActiveEvents::COLLISION_EVENTS,
-        Velocity::zero(),
-        RigidBody::Dynamic,
-        Sleeping::disabled(),
-        LockedAxes::ROTATION_LOCKED,
-        AdditionalMassProperties::Mass(1.0),
-        GravityScale(0.0),
-        Ccd { enabled: true }, // Prevent clipping when going fast
-        TransformBundle::from_transform(Transform::from_xyz(0.0, 3.0, 0.0)),
-        LogicalPlayer(0),
-        FpsControllerInput {
-            pitch: -TAU / 12.0,
-            yaw: TAU * 5.0 / 8.0,
-            ..default()
-        },
-        FpsController { ..default() }
-    ));
+        commands.spawn((
+            Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
+            ActiveEvents::COLLISION_EVENTS,
+            Velocity::zero(),
+            RigidBody::Dynamic,
+            Sleeping::disabled(),
+            LockedAxes::ROTATION_LOCKED,
+            AdditionalMassProperties::Mass(1.0),
+            GravityScale(0.0),
+            Ccd { enabled: true }, // Prevent clipping when going fast
+            TransformBundle::from_transform(Transform::from_xyz(0.0, 3.0, 0.0)),
+            LogicalPlayer(0),
+            FpsControllerInput {
+                pitch: -TAU / 12.0,
+                yaw: TAU * 5.0 / 8.0,
+                ..default()
+            },
+            FpsController { ..default() }
+        ));
     commands.spawn((
         Camera3dBundle::default(),
         RenderPlayer(0),
