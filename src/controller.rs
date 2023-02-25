@@ -174,9 +174,11 @@ pub fn fps_controller_input(
             }
             mouse_delta *= controller.sensitivity;
 
-            input.pitch = (input.pitch - mouse_delta.y)
-                .clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
-            input.yaw = input.yaw - mouse_delta.x;
+            input.pitch = (input.pitch - mouse_delta.y).clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
+            input.yaw -= mouse_delta.x;
+            if input.yaw.abs() > PI {
+                input.yaw = input.yaw.rem_euclid(TAU);
+            }
         }
 
         input.movement = Vec3::new(
@@ -220,22 +222,16 @@ pub fn fps_controller_move(
             }
         }
 
-        let orientation = if controller.move_mode == MoveMode::Noclip {
-            look_quat(input.pitch, input.yaw)
-        } else {
-            Quat::from_axis_angle(Vec3::Y, input.yaw)
-        };
-        let right = orientation * Vec3::X;
-        let forward = orientation * -Vec3::Z;
-        let position = transform.translation;
-        let rotation = transform.rotation;
+        // Change of basis matrix from local move space to world space
+        let mut move_to_world = calc_local_to_world(input.yaw, input.pitch);
+        move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
 
         match controller.move_mode {
             MoveMode::Noclip => {
                 if input.movement == Vec3::ZERO {
                     let friction = controller.fly_friction.clamp(0.0, 1.0);
                     controller.velocity *= 1.0 - friction;
-                    if controller.velocity.length_squared() < 1e-6 {
+                    if controller.velocity.length_squared() < f32::EPSILON {
                         controller.velocity = Vec3::ZERO;
                     }
                 } else {
@@ -244,23 +240,15 @@ pub fn fps_controller_move(
                     } else {
                         controller.fly_speed
                     };
-                    controller.velocity = input.movement.normalize() * fly_speed;
+                    controller.velocity = move_to_world * input.movement * fly_speed;
                 }
-                velocity.linvel = controller.velocity.x * right
-                    + controller.velocity.y * Vec3::Y
-                    + controller.velocity.z * forward;
+                velocity.linvel = controller.velocity;
             }
-
             MoveMode::Ground => {
                 if let Some(capsule) = collider.as_capsule() {
-                    let capsule = capsule.raw;
-                    let mut start_velocity = controller.velocity;
-                    let mut end_velocity = start_velocity;
-                    let lateral_speed = start_velocity.xz().length();
-
                     // Capsule cast downwards to find ground
-                    // Better than single raycast as it handles when you are near the edge of a surface
-                    let mut ground_hit = None;
+                    // Better than a ray cast as it handles when you are near the edge of a surface
+                    let capsule = capsule.raw;
                     let cast_capsule = Collider::capsule(
                         capsule.segment.a.into(),
                         capsule.segment.b.into(),
@@ -268,21 +256,23 @@ pub fn fps_controller_move(
                     );
                     // Avoid self collisions
                     let cast_groups = QueryFilter::default().exclude_rigid_body(entity);
-                    if let Some((_handle, hit)) = physics_context.cast_shape(
-                        position,
-                        rotation,
+                    let ground_hit = physics_context.cast_shape(
+                        transform.translation, transform.rotation,
                         -Vec3::Y,
                         &cast_capsule,
                         0.125,
                         cast_groups,
-                    ) {
-                        ground_hit = Some(hit);
-                    }
+                    );
 
-                    let mut wish_direction = input.movement.z * controller.forward_speed * forward
-                        + input.movement.x * controller.side_speed * right;
+                    let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
+                    if let Some((_, hit)) = ground_hit {
+                        move_to_world.x_axis -= Vec3::dot(move_to_world.x_axis, hit.normal1) * hit.normal1;
+                        move_to_world.z_axis -= Vec3::dot(move_to_world.z_axis, hit.normal1) * hit.normal1;
+                    }
+                    let mut wish_direction = move_to_world * input.movement * speeds;
+
                     let mut wish_speed = wish_direction.length();
-                    if wish_speed > 1e-6 {
+                    if wish_speed > f32::EPSILON {
                         // Avoid division by zero
                         wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
                     }
@@ -297,38 +287,39 @@ pub fn fps_controller_move(
 
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if let Some(hit) = ground_hit {
-                        let is_flat_ground = controller.ground_tick >= 1 && {
+                    if let Some((_, hit)) = ground_hit {
+                        let is_flat_ground = {
                             let dot = Vec3::dot(hit.normal1, Vec3::Y);
                             dot > controller.friction_normal_cutoff
                         };
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 && is_flat_ground {
+                            let lateral_speed = controller.velocity.xz().length();
                             if lateral_speed > controller.friction_speed_cutoff {
                                 friction(
                                     lateral_speed,
                                     controller.friction,
                                     controller.stop_speed,
                                     dt,
-                                    &mut end_velocity,
+                                    &mut controller.velocity,
                                 );
                             } else {
-                                end_velocity.x = 0.0;
-                                end_velocity.z = 0.0;
+                                controller.velocity.x = 0.0;
+                                controller.velocity.z = 0.0;
                             }
-                            end_velocity.y = 0.0;
+                            // controller.velocity.y = 0.0;
                         }
                         accelerate(
                             wish_direction,
                             wish_speed,
                             controller.acceleration,
                             dt,
-                            &mut end_velocity,
+                            &mut controller.velocity,
                         );
                         if input.jump && is_flat_ground {
-                            // Simulate one update ahead, since this is an instant velocity change
-                            start_velocity.y = controller.jump_speed;
-                            end_velocity.y = start_velocity.y - controller.gravity * dt;
+                            controller.velocity.y = controller.jump_speed;
+                        } else if controller.ground_tick == 0 {
+                            controller.velocity.y = 0.0;
                         }
                         // Increment ground tick but cap at max value
                         controller.ground_tick = controller.ground_tick.saturating_add(1);
@@ -340,26 +331,16 @@ pub fn fps_controller_move(
                             wish_speed,
                             controller.air_acceleration,
                             dt,
-                            &mut end_velocity,
+                            &mut controller.velocity,
                         );
-                        end_velocity.y -= controller.gravity * dt;
-                        let air_speed = end_velocity.xz().length();
+                        controller.velocity.y -= controller.gravity * dt;
+                        let air_speed = controller.velocity.xz().length();
                         if air_speed > controller.max_air_speed {
                             let ratio = controller.max_air_speed / air_speed;
-                            end_velocity.x *= ratio;
-                            end_velocity.z *= ratio;
+                            controller.velocity.x *= ratio;
+                            controller.velocity.z *= ratio;
                         }
                     }
-
-                    // TODO: try to add this in
-                    // At this point our collider may be intersecting with the ground
-                    // Fix up our collider by offsetting it to be flush with the ground
-                    // if end_vel.y < -1e6 {
-                    //     if let Some(ground_hit) = ground_hit {
-                    //         let normal = Vec3::from(*ground_hit.normal2);
-                    //         next_translation += normal * ground_hit.toi;
-                    //     }
-                    // }
 
                     let crouch_height = controller.crouch_height;
                     let upright_height = controller.upright_height;
@@ -379,34 +360,32 @@ pub fn fps_controller_move(
                         );
                     }
 
-                    let mut motion = (start_velocity + end_velocity) * 0.5;
-
                     // Prevent falling off of ledges
                     // TODO: instead of setting to zero subtract out the part that would make us fall
+                    let future_position = transform.translation + Vec3::new(controller.velocity.x, 0.0, controller.velocity.z) * dt;
                     if input.crouch && ground_hit.is_some() && physics_context.cast_shape(
-                        position + Vec3::new(motion.x, 0.0, motion.z) * dt,
-                        rotation,
+                        future_position,
+                        transform.rotation,
                         -Vec3::Y,
                         &cast_capsule,
                         0.125,
                         cast_groups,
                     ).is_none() {
-                        motion.x = 0.0;
-                        motion.z = 0.0;
-                        end_velocity.x = 0.0;
-                        end_velocity.z = 0.0;
+                        controller.velocity.x = 0.0;
+                        controller.velocity.z = 0.0;
                     }
 
-                    controller.velocity = end_velocity;
-                    velocity.linvel = motion;
+                    velocity.linvel = controller.velocity;
                 }
             }
         }
     }
 }
 
-fn look_quat(pitch: f32, yaw: f32) -> Quat {
-    Quat::from_euler(EulerRot::ZYX, 0.0, yaw, pitch)
+fn calc_local_to_world(yaw: f32, pitch: f32) -> Mat3 {
+    let mut local_to_world = Mat3::from_euler(EulerRot::YXZ, yaw, pitch, 0.0);
+    local_to_world.z_axis *= -1.0; // Forward is -Z
+    local_to_world
 }
 
 fn friction(lateral_speed: f32, friction: f32, stop_speed: f32, dt: f32, velocity: &mut Vec3) {
@@ -426,8 +405,7 @@ fn accelerate(wish_dir: Vec3, wish_speed: f32, accel: f32, dt: f32, velocity: &m
 
     let accel_speed = f32::min(accel * wish_speed * dt, add_speed);
     let wish_direction = wish_dir * accel_speed;
-    velocity.x += wish_direction.x;
-    velocity.z += wish_direction.z;
+    *velocity += wish_direction;
 }
 
 fn get_pressed(key_input: &Res<Input<KeyCode>>, key: KeyCode) -> f32 {
@@ -465,9 +443,8 @@ pub fn fps_controller_render(
                 }
                 // TODO: let this be more configurable
                 let camera_height = capsule.segment().b().y + capsule.radius() * 0.75;
-                render_transform.translation =
-                    logical_transform.translation + Vec3::Y * camera_height;
-                render_transform.rotation = look_quat(controller.pitch, controller.yaw);
+                render_transform.translation = logical_transform.translation + Vec3::Y * camera_height;
+                render_transform.rotation = Quat::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
             }
         }
     }

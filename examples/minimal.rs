@@ -33,6 +33,7 @@ fn main() {
         .add_startup_system(setup)
         .add_system(manage_cursor)
         .add_system(scene_colliders)
+        .add_system(display_text)
         .add_system(respawn)
         .run();
 }
@@ -81,7 +82,10 @@ fn setup(
             yaw: TAU * 5.0 / 8.0,
             ..default()
         },
-        FpsController { ..default() }
+        FpsController {
+            air_acceleration: 80.0,
+            ..default()
+        }
     ));
     commands.spawn((
         Camera3dBundle::default(),
@@ -92,6 +96,23 @@ fn setup(
         handle: assets.load("playground.glb"),
         is_loaded: false,
     });
+
+    commands.spawn(TextBundle::from_section(
+        "",
+        TextStyle {
+            font: assets.load("fira_mono.ttf"),
+            font_size: 24.0,
+            color: Color::BLACK,
+        },
+    ).with_style(Style {
+        position_type: PositionType::Absolute,
+        position: UiRect {
+            top: Val::Px(5.0),
+            left: Val::Px(5.0),
+            ..default()
+        },
+        ..default()
+    }));
 }
 
 fn respawn(
@@ -151,25 +172,40 @@ fn scene_colliders(
     }
 }
 
-pub fn manage_cursor(
+fn manage_cursor(
     mut windows: ResMut<Windows>,
     btn: Res<Input<MouseButton>>,
     key: Res<Input<KeyCode>>,
-    mut controllers: Query<&mut FpsController>,
+    mut query: Query<&mut FpsController>,
 ) {
     let window = windows.get_primary_mut().unwrap();
     if btn.just_pressed(MouseButton::Left) {
         window.set_cursor_grab_mode(CursorGrabMode::Locked);
         window.set_cursor_visibility(false);
-        for mut controller in &mut controllers {
+        for mut controller in &mut query {
             controller.enable_input = true;
         }
     }
     if key.just_pressed(KeyCode::Escape) {
         window.set_cursor_grab_mode(CursorGrabMode::None);
         window.set_cursor_visibility(true);
-        for mut controller in &mut controllers {
+        for mut controller in &mut query {
             controller.enable_input = false;
+        }
+    }
+}
+
+fn display_text(
+    mut controller_query: Query<(&FpsController, &Transform)>,
+    mut text_query: Query<&mut Text>,
+) {
+    for (controller, transform) in &mut controller_query {
+        for mut text in &mut text_query {
+            text.sections[0].value = format!(
+                "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}",
+                controller.velocity.x, controller.velocity.y, controller.velocity.z,
+                transform.translation.x, transform.translation.y, transform.translation.z,
+            );
         }
     }
 }
