@@ -88,7 +88,13 @@ fn setup(
         }
     ));
     commands.spawn((
-        Camera3dBundle::default(),
+        Camera3dBundle {
+            projection: Projection::Perspective(PerspectiveProjection {
+                fov: TAU / 5.0,
+                ..default()
+            }),
+            ..default()
+        },
         RenderPlayer(0),
     ));
 

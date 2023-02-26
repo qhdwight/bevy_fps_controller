@@ -222,10 +222,6 @@ pub fn fps_controller_move(
             }
         }
 
-        // Change of basis matrix from local move space to world space
-        let mut move_to_world = calc_local_to_world(input.yaw, input.pitch);
-        move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
-
         match controller.move_mode {
             MoveMode::Noclip => {
                 if input.movement == Vec3::ZERO {
@@ -240,6 +236,9 @@ pub fn fps_controller_move(
                     } else {
                         controller.fly_speed
                     };
+                    let mut move_to_world = Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
+                    move_to_world.z_axis *= -1.0; // Forward is -Z
+                    move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
                     controller.velocity = move_to_world * input.movement * fly_speed;
                 }
                 velocity.linvel = controller.velocity;
@@ -252,7 +251,7 @@ pub fn fps_controller_move(
                     let cast_capsule = Collider::capsule(
                         capsule.segment.a.into(),
                         capsule.segment.b.into(),
-                        capsule.radius * 0.9375,
+                        capsule.radius * 0.9,
                     );
                     // Avoid self collisions
                     let cast_groups = QueryFilter::default().exclude_rigid_body(entity);
@@ -265,20 +264,14 @@ pub fn fps_controller_move(
                     );
 
                     let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
-                    if let Some((_, hit)) = ground_hit {
-                        // Subtract the component of the movement that is parallel to the ground normal
-                        move_to_world.x_axis -= Vec3::dot(move_to_world.x_axis, hit.normal1) * hit.normal1;
-                        move_to_world.y_axis -= Vec3::dot(move_to_world.y_axis, hit.normal1) * hit.normal1;
-                        move_to_world.z_axis -= Vec3::dot(move_to_world.z_axis, hit.normal1) * hit.normal1;
-                    }
+                    let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
+                    move_to_world.z_axis *= -1.0; // Forward is -Z
                     let mut wish_direction = move_to_world * (input.movement * speeds);
-
                     let mut wish_speed = wish_direction.length();
                     if wish_speed > f32::EPSILON {
                         // Avoid division by zero
                         wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
                     }
-
                     let max_speed = if input.crouch {
                         controller.crouched_speed
                     } else if input.sprint {
@@ -286,51 +279,58 @@ pub fn fps_controller_move(
                     } else {
                         controller.walk_speed
                     };
-
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if ground_hit.map_or(false, |(_, hit)| {
-                        let dot = Vec3::dot(hit.normal1, Vec3::Y);
-                        dot > controller.ground_normal_cutoff
-                    }) {
+                    if let Some((_, hit)) = ground_hit {
+                        let is_on_flat_ground = Vec3::dot(hit.normal1, Vec3::Y) > controller.ground_normal_cutoff;
+
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
-                        if controller.ground_tick >= 1 {
+                        if controller.ground_tick >= 1 && is_on_flat_ground {
                             let lateral_speed = controller.velocity.xz().length();
                             if lateral_speed > controller.friction_speed_cutoff {
-                                friction(
-                                    lateral_speed,
-                                    controller.friction,
-                                    controller.stop_speed,
-                                    dt,
-                                    &mut controller.velocity,
-                                );
+                                let control = f32::max(lateral_speed, controller.stop_speed);
+                                let drop = control * controller.friction * dt;
+                                let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
+                                controller.velocity *= new_speed
                             } else {
                                 controller.velocity = Vec3::ZERO;
                             }
                         }
-                        accelerate(
+
+                        let mut add = acceleration(
                             wish_direction,
                             wish_speed,
                             controller.acceleration,
                             dt,
-                            &mut controller.velocity,
+                            controller.velocity,
                         );
-                        if input.jump {
+                        if is_on_flat_ground {
+                            add -= Vec3::dot(add, hit.normal1) * hit.normal1;
+                        } else {
+                            add.y -= controller.gravity * dt;
+                        }
+                        controller.velocity += add;
+
+                        if input.jump && is_on_flat_ground && hit.status == TOIStatus::Converged {
                             controller.velocity.y = controller.jump_speed;
                         }
+
                         // Increment ground tick but cap at max value
                         controller.ground_tick = controller.ground_tick.saturating_add(1);
                     } else {
                         controller.ground_tick = 0;
                         wish_speed = f32::min(wish_speed, controller.air_speed_cap);
-                        accelerate(
+
+                        let mut add = acceleration(
                             wish_direction,
                             wish_speed,
                             controller.air_acceleration,
                             dt,
-                            &mut controller.velocity,
+                            controller.velocity,
                         );
-                        controller.velocity.y -= controller.gravity * dt;
+                        add.y = -controller.gravity * dt;
+                        controller.velocity += add;
+
                         let air_speed = controller.velocity.xz().length();
                         if air_speed > controller.max_air_speed {
                             let ratio = controller.max_air_speed / air_speed;
@@ -378,30 +378,15 @@ pub fn fps_controller_move(
     }
 }
 
-fn calc_local_to_world(yaw: f32, pitch: f32) -> Mat3 {
-    let mut local_to_world = Mat3::from_euler(EulerRot::YXZ, yaw, pitch, 0.0);
-    local_to_world.z_axis *= -1.0; // Forward is -Z
-    local_to_world
-}
-
-fn friction(lateral_speed: f32, friction: f32, stop_speed: f32, dt: f32, velocity: &mut Vec3) {
-    let control = f32::max(lateral_speed, stop_speed);
-    let drop = control * friction * dt;
-    let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
-    *velocity *= new_speed;
-}
-
-fn accelerate(wish_dir: Vec3, wish_speed: f32, accel: f32, dt: f32, velocity: &mut Vec3) {
-    let velocity_projection = Vec3::dot(*velocity, wish_dir);
+fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, dt: f32, velocity: Vec3) -> Vec3 {
+    let velocity_projection = Vec3::dot(velocity, wish_direction);
     let add_speed = wish_speed - velocity_projection;
     if add_speed <= 0.0 {
-        return;
+        return Vec3::ZERO;
     }
 
-    let accel_speed = f32::min(accel * wish_speed * dt, add_speed);
-    let wish_direction = wish_dir * accel_speed;
-    velocity.x += wish_direction.x;
-    velocity.z += wish_direction.z;
+    let acceleration_speed = f32::min(acceleration * wish_speed * dt, add_speed);
+    wish_direction * acceleration_speed
 }
 
 fn get_pressed(key_input: &Res<Input<KeyCode>>, key: KeyCode) -> f32 {
