@@ -66,9 +66,9 @@ pub struct FpsController {
     pub max_air_speed: f32,
     pub acceleration: f32,
     pub friction: f32,
-    /// If the dot product of the normal of the surface and the upward vector,
-    /// which is a value from [-1, 1], is greater than this value, friction will be applied
-    pub friction_normal_cutoff: f32,
+    /// If the dot product (alignment) of the normal of the surface and the upward vector,
+    /// which is a value from [-1, 1], is greater than this value, ground movement is applied
+    pub ground_normal_cutoff: f32,
     pub friction_speed_cutoff: f32,
     pub jump_speed: f32,
     pub fly_speed: f32,
@@ -122,7 +122,7 @@ impl Default for FpsController {
             crouch_height: 1.25,
             acceleration: 10.0,
             friction: 10.0,
-            friction_normal_cutoff: 0.7,
+            ground_normal_cutoff: 0.7,
             friction_speed_cutoff: 0.1,
             fly_friction: 0.5,
             pitch: 0.0,
@@ -266,10 +266,12 @@ pub fn fps_controller_move(
 
                     let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
                     if let Some((_, hit)) = ground_hit {
+                        // Subtract the component of the movement that is parallel to the ground normal
                         move_to_world.x_axis -= Vec3::dot(move_to_world.x_axis, hit.normal1) * hit.normal1;
+                        move_to_world.y_axis -= Vec3::dot(move_to_world.y_axis, hit.normal1) * hit.normal1;
                         move_to_world.z_axis -= Vec3::dot(move_to_world.z_axis, hit.normal1) * hit.normal1;
                     }
-                    let mut wish_direction = move_to_world * input.movement * speeds;
+                    let mut wish_direction = move_to_world * (input.movement * speeds);
 
                     let mut wish_speed = wish_direction.length();
                     if wish_speed > f32::EPSILON {
@@ -287,13 +289,12 @@ pub fn fps_controller_move(
 
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if let Some((_, hit)) = ground_hit {
-                        let is_flat_ground = {
-                            let dot = Vec3::dot(hit.normal1, Vec3::Y);
-                            dot > controller.friction_normal_cutoff
-                        };
+                    if ground_hit.map_or(false, |(_, hit)| {
+                        let dot = Vec3::dot(hit.normal1, Vec3::Y);
+                        dot > controller.ground_normal_cutoff
+                    }) {
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
-                        if controller.ground_tick >= 1 && is_flat_ground {
+                        if controller.ground_tick >= 1 {
                             let lateral_speed = controller.velocity.xz().length();
                             if lateral_speed > controller.friction_speed_cutoff {
                                 friction(
@@ -304,10 +305,8 @@ pub fn fps_controller_move(
                                     &mut controller.velocity,
                                 );
                             } else {
-                                controller.velocity.x = 0.0;
-                                controller.velocity.z = 0.0;
+                                controller.velocity = Vec3::ZERO;
                             }
-                            // controller.velocity.y = 0.0;
                         }
                         accelerate(
                             wish_direction,
@@ -316,10 +315,8 @@ pub fn fps_controller_move(
                             dt,
                             &mut controller.velocity,
                         );
-                        if input.jump && is_flat_ground {
+                        if input.jump {
                             controller.velocity.y = controller.jump_speed;
-                        } else if controller.ground_tick == 0 {
-                            controller.velocity.y = 0.0;
                         }
                         // Increment ground tick but cap at max value
                         controller.ground_tick = controller.ground_tick.saturating_add(1);
@@ -371,8 +368,7 @@ pub fn fps_controller_move(
                         0.125,
                         cast_groups,
                     ).is_none() {
-                        controller.velocity.x = 0.0;
-                        controller.velocity.z = 0.0;
+                        controller.velocity = Vec3::ZERO;
                     }
 
                     velocity.linvel = controller.velocity;
@@ -392,8 +388,7 @@ fn friction(lateral_speed: f32, friction: f32, stop_speed: f32, dt: f32, velocit
     let control = f32::max(lateral_speed, stop_speed);
     let drop = control * friction * dt;
     let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
-    velocity.x *= new_speed;
-    velocity.z *= new_speed;
+    *velocity *= new_speed;
 }
 
 fn accelerate(wish_dir: Vec3, wish_speed: f32, accel: f32, dt: f32, velocity: &mut Vec3) {
@@ -405,7 +400,8 @@ fn accelerate(wish_dir: Vec3, wish_speed: f32, accel: f32, dt: f32, velocity: &m
 
     let accel_speed = f32::min(accel * wish_speed * dt, add_speed);
     let wish_direction = wish_dir * accel_speed;
-    *velocity += wish_direction;
+    velocity.x += wish_direction.x;
+    velocity.z += wish_direction.z;
 }
 
 fn get_pressed(key_input: &Res<Input<KeyCode>>, key: KeyCode) -> f32 {
