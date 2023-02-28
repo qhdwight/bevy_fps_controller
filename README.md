@@ -9,16 +9,16 @@ Inspired from Source engine movement, this plugin implements movement suitable f
 
 ### Features
 
-* Air strafing
-* Bunny hopping (hold down jump)
-* Sprinting
+* Air strafing and bunny hopping (hold down jump key)
+* Support for sloped ground
+* Crouching (prevents falling off ledges), sprinting
 * Noclip mode
 * Configurable settings
-* SOON: crouching, walking
 
 ### Examples
 
 See [main.rs](./examples/minimal.rs)
+
 ```bash
 cargo run --example minimal
 ```
@@ -34,13 +34,22 @@ fn main() {
         ...
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(FpsControllerPlugin)
+        .add_startup_system(setup)
         ...
 }
 
-fn setup(...) {
+fn setup(mut commands: Commands, ...) {
     ...
     commands.spawn((
         Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
+        Friction {
+            coefficient: 0.0,
+            combine_rule: CoefficientCombineRule::Min,
+        },
+        Restitution {
+            coefficient: 0.0,
+            combine_rule: CoefficientCombineRule::Min,
+        },
         ActiveEvents::COLLISION_EVENTS,
         Velocity::zero(),
         RigidBody::Dynamic,
@@ -68,6 +77,6 @@ fn setup(...) {
 
 ### Demo
 
-Used by my other project: https://github.com/qhdwight/voxel-game-rs
+https://user-images.githubusercontent.com/20666629/221995601-2ec352fe-a8b0-4f8c-9a81-beaf898b2b41.mp4
 
-https://user-images.githubusercontent.com/20666629/157115719-719a1e7b-a308-4239-919f-8daa9f2ef6e3.mp4
+Used by my other project: https://github.com/qhdwight/voxel-game-rs

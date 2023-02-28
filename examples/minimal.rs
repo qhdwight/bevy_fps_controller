@@ -1,6 +1,9 @@
 use std::f32::consts::TAU;
 
 use bevy::{
+    gltf::{GltfMesh, GltfNode},
+    gltf::Gltf,
+    math::Vec3Swizzles,
     prelude::*,
     window::CursorGrabMode,
 };
@@ -8,11 +11,13 @@ use bevy_rapier3d::prelude::*;
 
 use bevy_fps_controller::controller::*;
 
+const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
+
 fn main() {
     App::new()
         .insert_resource(AmbientLight {
             color: Color::WHITE,
-            brightness: 0.25,
+            brightness: 0.5,
         })
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
@@ -28,21 +33,23 @@ fn main() {
         .add_plugin(FpsControllerPlugin)
         .add_startup_system(setup)
         .add_system(manage_cursor)
+        .add_system(scene_colliders)
+        .add_system(display_text)
+        .add_system(respawn)
         .run();
 }
 
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    assets: Res<AssetServer>,
 ) {
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
-            illuminance: 2000.0,
+            illuminance: 6000.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(-38.0, 40.0, 34.0),
+        transform: Transform::from_xyz(4.0, 7.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
 
@@ -69,101 +76,144 @@ fn setup(
         AdditionalMassProperties::Mass(1.0),
         GravityScale(0.0),
         Ccd { enabled: true }, // Prevent clipping when going fast
-        TransformBundle::from_transform(Transform::from_xyz(0.0, 3.0, 0.0)),
+        TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
         LogicalPlayer(0),
         FpsControllerInput {
             pitch: -TAU / 12.0,
             yaw: TAU * 5.0 / 8.0,
             ..default()
         },
-        FpsController { ..default() }
+        FpsController {
+            air_acceleration: 80.0,
+            ..default()
+        }
     ));
     commands.spawn((
-        Camera3dBundle::default(),
+        Camera3dBundle {
+            projection: Projection::Perspective(PerspectiveProjection {
+                fov: TAU / 5.0,
+                ..default()
+            }),
+            ..default()
+        },
         RenderPlayer(0),
     ));
 
-    // Floor
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Box {
-                min_x: -20.0,
-                max_x: 20.0,
-                min_y: -0.25,
-                max_y: 0.25,
-                min_z: -20.0,
-                max_z: 20.0,
-            })),
-            material: materials.add(StandardMaterial {
-                base_color: Color::hex("8C9A9E").unwrap(),
-                ..default()
-            }),
-            transform: Transform::from_xyz(0.0, -0.25, 0.0),
-            ..default()
-        },
-        Collider::cuboid(20.0, 0.25, 20.0),
-        RigidBody::Fixed,
-    ));
-
-    let material = materials.add(StandardMaterial {
-        base_color: Color::hex("747578").unwrap(),
-        ..default()
+    commands.insert_resource(MainScene {
+        handle: assets.load("playground.glb"),
+        is_loaded: false,
     });
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Box {
-                min_x: -1.0,
-                max_x: 1.0,
-                min_y: -0.5,
-                max_y: 0.5,
-                min_z: -1.0,
-                max_z: 1.0,
-            })),
-            material: material.clone(),
-            transform: Transform::from_xyz(4.0, 0.5, 4.0),
+
+    commands.spawn(TextBundle::from_section(
+        "",
+        TextStyle {
+            font: assets.load("fira_mono.ttf"),
+            font_size: 24.0,
+            color: Color::BLACK,
+        },
+    ).with_style(Style {
+        position_type: PositionType::Absolute,
+        position: UiRect {
+            top: Val::Px(5.0),
+            left: Val::Px(5.0),
             ..default()
         },
-        Collider::cuboid(1.0, 1.0, 1.0),
-        RigidBody::Fixed,
-    ));
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Box {
-                min_x: -1.0,
-                max_x: 1.0,
-                min_y: -1.0,
-                max_y: 1.0,
-                min_z: -1.0,
-                max_z: 1.0,
-            })),
-            material: material.clone(),
-            transform: Transform::from_xyz(2.0, 1.0, 4.0),
-            ..default()
-        },
-        Collider::cuboid(1.0, 2.0, 1.0),
-        RigidBody::Fixed,
-    ));
+        ..default()
+    }));
 }
 
-pub fn manage_cursor(
+fn respawn(
+    mut query: Query<(&mut Transform, &mut Velocity)>,
+) {
+    for (mut transform, mut velocity) in &mut query {
+        if transform.translation.y > -50.0 {
+            continue;
+        }
+
+        velocity.linvel = Vec3::ZERO;
+        transform.translation = SPAWN_POINT;
+    }
+}
+
+#[derive(Resource)]
+struct MainScene {
+    handle: Handle<Gltf>,
+    is_loaded: bool,
+}
+
+fn scene_colliders(
+    mut commands: Commands,
+    mut main_scene: ResMut<MainScene>,
+    gltf_assets: Res<Assets<Gltf>>,
+    gltf_mesh_assets: Res<Assets<GltfMesh>>,
+    gltf_node_assets: Res<Assets<GltfNode>>,
+    mesh_assets: Res<Assets<Mesh>>,
+) {
+    if main_scene.is_loaded {
+        return;
+    }
+
+    let gltf = gltf_assets.get(&main_scene.handle);
+
+    if let Some(gltf) = gltf {
+        let scene = gltf.scenes.first().unwrap().clone();
+        commands.spawn(SceneBundle {
+            scene,
+            ..default()
+        });
+        for node in &gltf.nodes {
+            let node = gltf_node_assets.get(&node).unwrap();
+            if let Some(gltf_mesh) = node.mesh.clone() {
+                let gltf_mesh = gltf_mesh_assets.get(&gltf_mesh).unwrap();
+                for mesh_primitive in &gltf_mesh.primitives {
+                    let mesh = mesh_assets.get(&mesh_primitive.mesh).unwrap();
+                    commands.spawn((
+                        Collider::from_bevy_mesh(mesh, &ComputedColliderShape::TriMesh).unwrap(),
+                        RigidBody::Fixed,
+                        TransformBundle::from_transform(node.transform),
+                    ));
+                }
+            }
+        }
+        main_scene.is_loaded = true;
+    }
+}
+
+fn manage_cursor(
     mut windows: ResMut<Windows>,
     btn: Res<Input<MouseButton>>,
     key: Res<Input<KeyCode>>,
-    mut controllers: Query<&mut FpsController>,
+    mut query: Query<&mut FpsController>,
 ) {
     let window = windows.get_primary_mut().unwrap();
     if btn.just_pressed(MouseButton::Left) {
         window.set_cursor_grab_mode(CursorGrabMode::Locked);
         window.set_cursor_visibility(false);
-        for mut controller in &mut controllers {
+        for mut controller in &mut query {
             controller.enable_input = true;
         }
     }
     if key.just_pressed(KeyCode::Escape) {
         window.set_cursor_grab_mode(CursorGrabMode::None);
         window.set_cursor_visibility(true);
-        for mut controller in &mut controllers {
+        for mut controller in &mut query {
             controller.enable_input = false;
+        }
+    }
+}
+
+fn display_text(
+    mut controller_query: Query<(&Transform, &Velocity)>,
+    mut text_query: Query<&mut Text>,
+) {
+    for (transform, velocity) in &mut controller_query {
+        for mut text in &mut text_query {
+            text.sections[0].value = format!(
+                "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}\nspd: {:.2}",
+                velocity.linvel.x, velocity.linvel.y, velocity.linvel.z,
+                transform.translation.x, transform.translation.y, transform.translation.z,
+                velocity.linvel.xz().length()
+            );
         }
     }
 }
