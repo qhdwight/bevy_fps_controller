@@ -68,7 +68,7 @@ pub struct FpsController {
     pub friction: f32,
     /// If the dot product (alignment) of the normal of the surface and the upward vector,
     /// which is a value from [-1, 1], is greater than this value, ground movement is applied
-    pub ground_normal_cutoff: f32,
+    pub traction_normal_cutoff: f32,
     pub friction_speed_cutoff: f32,
     pub jump_speed: f32,
     pub fly_speed: f32,
@@ -82,7 +82,6 @@ pub struct FpsController {
     pub fly_friction: f32,
     pub pitch: f32,
     pub yaw: f32,
-    pub velocity: Vec3,
     pub ground_tick: u8,
     pub stop_speed: f32,
     pub sensitivity: f32,
@@ -122,12 +121,11 @@ impl Default for FpsController {
             crouch_height: 1.25,
             acceleration: 10.0,
             friction: 10.0,
-            ground_normal_cutoff: 0.7,
+            traction_normal_cutoff: 0.7,
             friction_speed_cutoff: 0.1,
             fly_friction: 0.5,
             pitch: 0.0,
             yaw: 0.0,
-            velocity: Vec3::ZERO,
             ground_tick: 0,
             stop_speed: 1.0,
             jump_speed: 8.5,
@@ -226,9 +224,9 @@ pub fn fps_controller_move(
             MoveMode::Noclip => {
                 if input.movement == Vec3::ZERO {
                     let friction = controller.fly_friction.clamp(0.0, 1.0);
-                    controller.velocity *= 1.0 - friction;
-                    if controller.velocity.length_squared() < f32::EPSILON {
-                        controller.velocity = Vec3::ZERO;
+                    velocity.linvel *= 1.0 - friction;
+                    if velocity.linvel.length_squared() < f32::EPSILON {
+                        velocity.linvel = Vec3::ZERO;
                     }
                 } else {
                     let fly_speed = if input.sprint {
@@ -239,9 +237,8 @@ pub fn fps_controller_move(
                     let mut move_to_world = Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
-                    controller.velocity = move_to_world * input.movement * fly_speed;
+                    velocity.linvel = move_to_world * input.movement * fly_speed;
                 }
-                velocity.linvel = controller.velocity;
             }
             MoveMode::Ground => {
                 if let Some(capsule) = collider.as_capsule() {
@@ -249,13 +246,12 @@ pub fn fps_controller_move(
                     // Better than a ray cast as it handles when you are near the edge of a surface
                     let capsule = capsule.raw;
                     let cast_capsule = Collider::capsule(
-                        capsule.segment.a.into(),
-                        capsule.segment.b.into(),
+                        capsule.segment.a.into(), capsule.segment.b.into(),
                         capsule.radius * 0.9,
                     );
                     // Avoid self collisions
                     let cast_groups = QueryFilter::default().exclude_rigid_body(entity);
-                    let ground_hit = physics_context.cast_shape(
+                    let ground_cast = physics_context.cast_shape(
                         transform.translation, transform.rotation,
                         -Vec3::Y,
                         &cast_capsule,
@@ -281,19 +277,23 @@ pub fn fps_controller_move(
                     };
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if let Some((_, hit)) = ground_hit {
-                        let is_on_flat_ground = Vec3::dot(hit.normal1, Vec3::Y) > controller.ground_normal_cutoff;
+                    if let Some((_, hit)) = ground_cast {
+                        let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
-                        if controller.ground_tick >= 1 && is_on_flat_ground {
-                            let lateral_speed = controller.velocity.xz().length();
+                        if controller.ground_tick >= 1 && has_traction {
+                            let lateral_speed = velocity.linvel.xz().length();
                             if lateral_speed > controller.friction_speed_cutoff {
                                 let control = f32::max(lateral_speed, controller.stop_speed);
                                 let drop = control * controller.friction * dt;
                                 let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
-                                controller.velocity *= new_speed
+                                velocity.linvel.x *= new_speed;
+                                velocity.linvel.z *= new_speed;
                             } else {
-                                controller.velocity = Vec3::ZERO;
+                                velocity.linvel = Vec3::ZERO;
+                            }
+                            if controller.ground_tick == 1 {
+                                velocity.linvel.y = 0.0;
                             }
                         }
 
@@ -301,18 +301,21 @@ pub fn fps_controller_move(
                             wish_direction,
                             wish_speed,
                             controller.acceleration,
+                            velocity.linvel,
                             dt,
-                            controller.velocity,
                         );
-                        if is_on_flat_ground {
-                            add -= Vec3::dot(add, hit.normal1) * hit.normal1;
-                        } else {
+                        if !has_traction {
                             add.y -= controller.gravity * dt;
                         }
-                        controller.velocity += add;
+                        velocity.linvel += add;
 
-                        if input.jump && is_on_flat_ground && hit.status == TOIStatus::Converged {
-                            controller.velocity.y = controller.jump_speed;
+                        if has_traction {
+                            let linvel = velocity.linvel;
+                            velocity.linvel -= Vec3::dot(linvel, hit.normal1) * hit.normal1;
+
+                            if input.jump {
+                                velocity.linvel.y = controller.jump_speed;
+                            }
                         }
 
                         // Increment ground tick but cap at max value
@@ -325,19 +328,21 @@ pub fn fps_controller_move(
                             wish_direction,
                             wish_speed,
                             controller.air_acceleration,
+                            velocity.linvel,
                             dt,
-                            controller.velocity,
                         );
                         add.y = -controller.gravity * dt;
-                        controller.velocity += add;
+                        velocity.linvel += add;
 
-                        let air_speed = controller.velocity.xz().length();
+                        let air_speed = velocity.linvel.xz().length();
                         if air_speed > controller.max_air_speed {
                             let ratio = controller.max_air_speed / air_speed;
-                            controller.velocity.x *= ratio;
-                            controller.velocity.z *= ratio;
+                            velocity.linvel.x *= ratio;
+                            velocity.linvel.z *= ratio;
                         }
                     }
+
+                    /* Crouching */
 
                     let crouch_height = controller.crouch_height;
                     let upright_height = controller.upright_height;
@@ -357,28 +362,58 @@ pub fn fps_controller_move(
                         );
                     }
 
-                    // Prevent falling off of ledges
-                    // TODO: instead of setting to zero subtract out the part that would make us fall
-                    let future_position = transform.translation + Vec3::new(controller.velocity.x, 0.0, controller.velocity.z) * dt;
-                    if input.crouch && ground_hit.is_some() && physics_context.cast_shape(
-                        future_position,
-                        transform.rotation,
-                        -Vec3::Y,
-                        &cast_capsule,
-                        0.125,
-                        cast_groups,
-                    ).is_none() {
-                        controller.velocity = Vec3::ZERO;
+                    // Prevent falling off ledges
+                    if controller.ground_tick >= 1 && input.crouch {
+                        for _ in 0..2 {
+                            // Find the component of our velocity that is overhanging and subtract it off
+                            let overhang = overhang_component(entity, transform.as_ref(), physics_context.as_ref(), velocity.linvel, dt);
+                            if let Some(overhang) = overhang {
+                                velocity.linvel -= overhang;
+                            }
+                        }
+                        // If we are still overhanging consider unsolvable and freeze
+                        if overhang_component(entity, transform.as_ref(), physics_context.as_ref(), velocity.linvel, dt).is_some() {
+                            velocity.linvel = Vec3::ZERO;
+                        }
                     }
-
-                    velocity.linvel = controller.velocity;
                 }
             }
         }
     }
 }
 
-fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, dt: f32, velocity: Vec3) -> Vec3 {
+fn overhang_component(entity: Entity, transform: &Transform, physics_context: &RapierContext, velocity: Vec3, dt: f32) -> Option<Vec3> {
+    // Cast a segment (zero radius on capsule) from our next position back towards us
+    // If there is a ledge in front of us we will hit the edge of it
+    // We can use the normal of the hit to subtract off the component that is overhanging
+    let cast_capsule = Collider::capsule(Vec3::Y * 0.125, -Vec3::Y * 0.125, 0.0);
+    let filter = QueryFilter::default().exclude_rigid_body(entity);
+    let future_position = transform.translation + velocity * dt;
+    let cast = physics_context.cast_shape(
+        future_position, transform.rotation,
+        -velocity,
+        &cast_capsule,
+        0.5,
+        filter,
+    );
+    if let Some((_, toi)) = cast {
+        let cast = physics_context.cast_ray(
+            future_position + Vec3::Y * 0.125, -Vec3::Y,
+            0.375,
+            false,
+            filter,
+        );
+        // Make sure that this is actually a ledge, e.g. there is no ground in front of us
+        if cast.is_none() {
+            let normal = -toi.normal1;
+            let alignment = Vec3::dot(velocity, normal);
+            return Some(alignment * normal);
+        }
+    }
+    None
+}
+
+fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, velocity: Vec3, dt: f32) -> Vec3 {
     let velocity_projection = Vec3::dot(velocity, wish_direction);
     let add_speed = wish_speed - velocity_projection;
     if add_speed <= 0.0 {

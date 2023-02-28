@@ -3,6 +3,7 @@ use std::f32::consts::TAU;
 use bevy::{
     gltf::{GltfMesh, GltfNode},
     gltf::Gltf,
+    math::Vec3Swizzles,
     prelude::*,
     window::CursorGrabMode,
 };
@@ -10,7 +11,7 @@ use bevy_rapier3d::prelude::*;
 
 use bevy_fps_controller::controller::*;
 
-const SPAWN_POINT: Vec3 = Vec3::new(0.0, 0.1, 8.0);
+const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
 fn main() {
     App::new()
@@ -122,14 +123,14 @@ fn setup(
 }
 
 fn respawn(
-    mut query: Query<(&mut Transform, &mut FpsController)>,
+    mut query: Query<(&mut Transform, &mut Velocity)>,
 ) {
-    for (mut transform, mut controller) in &mut query {
+    for (mut transform, mut velocity) in &mut query {
         if transform.translation.y > -50.0 {
             continue;
         }
 
-        controller.velocity = Vec3::ZERO;
+        velocity.linvel = Vec3::ZERO;
         transform.translation = SPAWN_POINT;
     }
 }
@@ -202,15 +203,16 @@ fn manage_cursor(
 }
 
 fn display_text(
-    mut controller_query: Query<(&FpsController, &Transform)>,
+    mut controller_query: Query<(&Transform, &Velocity)>,
     mut text_query: Query<&mut Text>,
 ) {
-    for (controller, transform) in &mut controller_query {
+    for (transform, velocity) in &mut controller_query {
         for mut text in &mut text_query {
             text.sections[0].value = format!(
-                "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}",
-                controller.velocity.x, controller.velocity.y, controller.velocity.z,
+                "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}\nspd: {:.2}",
+                velocity.linvel.x, velocity.linvel.y, velocity.linvel.z,
                 transform.translation.x, transform.translation.y, transform.translation.z,
+                velocity.linvel.xz().length()
             );
         }
     }
