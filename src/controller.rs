@@ -86,6 +86,7 @@ pub struct FpsController {
     pub stop_speed: f32,
     pub sensitivity: f32,
     pub enable_input: bool,
+    pub step_offset: f32,
     pub key_forward: KeyCode,
     pub key_back: KeyCode,
     pub key_left: KeyCode,
@@ -129,6 +130,7 @@ impl Default for FpsController {
             ground_tick: 0,
             stop_speed: 1.0,
             jump_speed: 8.5,
+            step_offset: 0.0,
             enable_input: true,
             key_forward: KeyCode::W,
             key_back: KeyCode::S,
@@ -212,7 +214,7 @@ pub fn fps_controller_move(
 ) {
     let dt = time.delta_seconds();
 
-    for (entity, input, mut controller, mut collider, transform, mut velocity) in query.iter_mut() {
+    for (entity, input, mut controller, mut collider, mut transform, mut velocity) in query.iter_mut() {
         if input.fly {
             controller.move_mode = match controller.move_mode {
                 MoveMode::Noclip => MoveMode::Ground,
@@ -250,13 +252,13 @@ pub fn fps_controller_move(
                         capsule.radius * 0.9,
                     );
                     // Avoid self collisions
-                    let cast_groups = QueryFilter::default().exclude_rigid_body(entity);
+                    let filter = QueryFilter::default().exclude_rigid_body(entity);
                     let ground_cast = physics_context.cast_shape(
                         transform.translation, transform.rotation,
                         -Vec3::Y,
                         &cast_capsule,
                         0.125,
-                        cast_groups,
+                        filter,
                     );
 
                     let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
@@ -277,8 +279,8 @@ pub fn fps_controller_move(
                     };
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if let Some((_, hit)) = ground_cast {
-                        let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                    if let Some((_, toi)) = ground_cast {
+                        let has_traction = Vec3::dot(toi.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 && has_traction {
@@ -293,7 +295,7 @@ pub fn fps_controller_move(
                                 velocity.linvel = Vec3::ZERO;
                             }
                             if controller.ground_tick == 1 {
-                                velocity.linvel.y = 0.0;
+                                velocity.linvel.y = -toi.toi;
                             }
                         }
 
@@ -311,7 +313,7 @@ pub fn fps_controller_move(
 
                         if has_traction {
                             let linvel = velocity.linvel;
-                            velocity.linvel -= Vec3::dot(linvel, hit.normal1) * hit.normal1;
+                            velocity.linvel -= Vec3::dot(linvel, toi.normal1) * toi.normal1;
 
                             if input.jump {
                                 velocity.linvel.y = controller.jump_speed;
@@ -360,6 +362,22 @@ pub fn fps_controller_move(
                             Vec3::Y * 0.5,
                             Vec3::Y * controller.height,
                         );
+                    }
+
+                    // Step offset
+                    if controller.step_offset > f32::EPSILON && controller.ground_tick >= 1 {
+                        let cast_offset = velocity.linvel.normalize_or_zero() * controller.radius * 1.0625;
+                        let cast = physics_context.cast_ray_and_get_normal(
+                            transform.translation + cast_offset + Vec3::Y * controller.step_offset * 1.0625,
+                            -Vec3::Y,
+                            controller.step_offset * 0.9375,
+                            false,
+                            filter,
+                        );
+                        if let Some((_, hit)) = cast {
+                            transform.translation.y += controller.step_offset * 1.0625 - hit.toi;
+                            transform.translation += cast_offset;
+                        }
                     }
 
                     // Prevent falling off ledges
