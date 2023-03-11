@@ -21,28 +21,24 @@ fn main() {
         })
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            window: WindowDescriptor {
-                title: String::from("Minimal FPS Controller Example"),
-                ..default()
-            },
-            ..default()
-        }))
+        .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         // .add_plugin(RapierDebugRenderPlugin::default())
         .add_plugin(FpsControllerPlugin)
         .add_startup_system(setup)
-        .add_system(manage_cursor)
-        .add_system(scene_colliders)
-        .add_system(display_text)
-        .add_system(respawn)
+        .add_systems((manage_cursor, scene_colliders, display_text, respawn))
         .run();
 }
 
 fn setup(
     mut commands: Commands,
+    mut window: Query<&mut Window>,
     assets: Res<AssetServer>,
 ) {
+    let mut window = window.single_mut();
+    window.title = String::from("Minimal FPS Controller Example");
+    // commands.spawn(Window { title: "Minimal FPS Controller Example".to_string(), ..default() });
+
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
             illuminance: 6000.0,
@@ -180,23 +176,23 @@ fn scene_colliders(
 }
 
 fn manage_cursor(
-    mut windows: ResMut<Windows>,
     btn: Res<Input<MouseButton>>,
     key: Res<Input<KeyCode>>,
-    mut query: Query<&mut FpsController>,
+    mut window_query: Query<&mut Window>,
+    mut controller_query: Query<&mut FpsController>,
 ) {
-    let window = windows.get_primary_mut().unwrap();
+    let mut window = window_query.single_mut();
     if btn.just_pressed(MouseButton::Left) {
-        window.set_cursor_grab_mode(CursorGrabMode::Locked);
-        window.set_cursor_visibility(false);
-        for mut controller in &mut query {
+        window.cursor.grab_mode = CursorGrabMode::Locked;
+        window.cursor.visible = false;
+        for mut controller in &mut controller_query {
             controller.enable_input = true;
         }
     }
     if key.just_pressed(KeyCode::Escape) {
-        window.set_cursor_grab_mode(CursorGrabMode::None);
-        window.set_cursor_visibility(true);
-        for mut controller in &mut query {
+        window.cursor.grab_mode = CursorGrabMode::None;
+        window.cursor.visible = true;
+        for mut controller in &mut controller_query {
             controller.enable_input = false;
         }
     }

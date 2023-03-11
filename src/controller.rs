@@ -9,23 +9,9 @@ use bevy_rapier3d::prelude::*;
 
 pub struct FpsControllerPlugin;
 
-#[derive(SystemLabel)]
-enum FpsSystemLabel {
-    Input,
-    Look,
-    Move,
-    Render,
-}
-
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        // TODO: use system piping instead?
-        app.add_system_set(SystemSet::new()
-            .with_system(fps_controller_input.label(FpsSystemLabel::Input))
-            .with_system(fps_controller_look.label(FpsSystemLabel::Look).after(FpsSystemLabel::Input))
-            .with_system(fps_controller_move.label(FpsSystemLabel::Move).after(FpsSystemLabel::Look))
-            .with_system(fps_controller_render.label(FpsSystemLabel::Render).after(FpsSystemLabel::Move))
-        );
+        app.add_systems((fps_controller_input, fps_controller_look, fps_controller_move, fps_controller_render).chain());
     }
 }
 
@@ -158,7 +144,6 @@ const ANGLE_EPSILON: f32 = 0.001953125;
 
 pub fn fps_controller_input(
     key_input: Res<Input<KeyCode>>,
-    mut windows: ResMut<Windows>,
     mut mouse_events: EventReader<MouseMotion>,
     mut query: Query<(&FpsController, &mut FpsControllerInput)>,
 ) {
@@ -166,19 +151,17 @@ pub fn fps_controller_input(
         if !controller.enable_input {
             continue;
         }
-        let window = windows.get_primary_mut().unwrap();
-        if window.is_focused() {
-            let mut mouse_delta = Vec2::ZERO;
-            for mouse_event in mouse_events.iter() {
-                mouse_delta += mouse_event.delta;
-            }
-            mouse_delta *= controller.sensitivity;
 
-            input.pitch = (input.pitch - mouse_delta.y).clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
-            input.yaw -= mouse_delta.x;
-            if input.yaw.abs() > PI {
-                input.yaw = input.yaw.rem_euclid(TAU);
-            }
+        let mut mouse_delta = Vec2::ZERO;
+        for mouse_event in mouse_events.iter() {
+            mouse_delta += mouse_event.delta;
+        }
+        mouse_delta *= controller.sensitivity;
+
+        input.pitch = (input.pitch - mouse_delta.y).clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
+        input.yaw -= mouse_delta.x;
+        if input.yaw.abs() > PI {
+            input.yaw = input.yaw.rem_euclid(TAU);
         }
 
         input.movement = Vec3::new(
