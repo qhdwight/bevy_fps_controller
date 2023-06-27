@@ -1,4 +1,11 @@
-use std::f32::consts::*;
+#![allow(
+    clippy::needless_pass_by_value,
+    clippy::module_name_repetitions,
+    clippy::struct_excessive_bools,
+    clippy::too_many_lines,
+    clippy::cognitive_complexity
+)]
+use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
 use bevy_rapier3d::prelude::*;
@@ -19,7 +26,7 @@ impl Plugin for FpsControllerPlugin {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum MoveMode {
     Noclip,
     Ground,
@@ -148,7 +155,7 @@ impl Default for FpsController {
 // ███████╗╚██████╔╝╚██████╔╝██║╚██████╗
 // ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝ ╚═════╝
 
-const ANGLE_EPSILON: f32 = 0.001953125;
+const ANGLE_EPSILON: f32 = 0.001_953_125;
 
 pub fn fps_controller_input(
     key_input: Res<Input<KeyCode>>,
@@ -374,7 +381,8 @@ pub fn fps_controller_move(
                             filter,
                         );
                         if let Some((_, hit)) = cast {
-                            transform.translation.y += controller.step_offset * 1.0625 - hit.toi;
+                            transform.translation.y +=
+                                controller.step_offset.mul_add(1.0625, -hit.toi);
                             transform.translation += cast_offset;
                         }
                     }
@@ -503,7 +511,7 @@ pub fn fps_controller_render(
                     continue;
                 }
                 // TODO: let this be more configurable
-                let camera_height = capsule.segment().b().y + capsule.radius() * 0.75;
+                let camera_height = capsule.radius().mul_add(0.75, capsule.segment().b().y);
                 render_transform.translation =
                     logical_transform.translation + Vec3::Y * camera_height;
                 render_transform.rotation =

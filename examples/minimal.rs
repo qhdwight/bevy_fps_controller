@@ -1,3 +1,4 @@
+#![allow(clippy::needless_pass_by_value)]
 use std::f32::consts::TAU;
 
 use bevy::{
@@ -9,7 +10,9 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::*;
 
-use bevy_fps_controller::controller::*;
+use bevy_fps_controller::controller::{
+    FpsController, FpsControllerInput, FpsControllerPlugin, LogicalPlayer, RenderPlayer,
+};
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
@@ -152,7 +155,7 @@ fn scene_colliders(
         let scene = gltf.scenes.first().unwrap().clone();
         commands.spawn(SceneBundle { scene, ..default() });
         for node in &gltf.nodes {
-            let node = gltf_node_assets.get(&node).unwrap();
+            let node = gltf_node_assets.get(node).unwrap();
             if let Some(gltf_mesh) = node.mesh.clone() {
                 let gltf_mesh = gltf_mesh_assets.get(&gltf_mesh).unwrap();
                 for mesh_primitive in &gltf_mesh.primitives {
