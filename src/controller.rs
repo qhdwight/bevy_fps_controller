@@ -1,17 +1,21 @@
 use std::f32::consts::*;
 
-use bevy::{
-    input::mouse::MouseMotion,
-    math::Vec3Swizzles,
-    prelude::*,
-};
+use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
 use bevy_rapier3d::prelude::*;
 
 pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems((fps_controller_input, fps_controller_look, fps_controller_move, fps_controller_render).chain());
+        app.add_systems(
+            (
+                fps_controller_input,
+                fps_controller_look,
+                fps_controller_move,
+                fps_controller_render,
+            )
+                .chain(),
+        );
     }
 }
 
@@ -22,10 +26,14 @@ pub enum MoveMode {
 }
 
 #[derive(Component)]
-pub struct LogicalPlayer(pub u8);
+pub struct LogicalPlayer {
+    pub player_id: u8,
+}
 
 #[derive(Component)]
-pub struct RenderPlayer(pub u8);
+pub struct RenderPlayer {
+    pub player_id: u8,
+}
 
 #[derive(Component, Default)]
 pub struct FpsControllerInput {
@@ -158,7 +166,8 @@ pub fn fps_controller_input(
         }
         mouse_delta *= controller.sensitivity;
 
-        input.pitch = (input.pitch - mouse_delta.y).clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
+        input.pitch = (input.pitch - mouse_delta.y)
+            .clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
         input.yaw -= mouse_delta.x;
         if input.yaw.abs() > PI {
             input.yaw = input.yaw.rem_euclid(TAU);
@@ -197,7 +206,9 @@ pub fn fps_controller_move(
 ) {
     let dt = time.delta_seconds();
 
-    for (entity, input, mut controller, mut collider, mut transform, mut velocity) in query.iter_mut() {
+    for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
+        query.iter_mut()
+    {
         if input.fly {
             controller.move_mode = match controller.move_mode {
                 MoveMode::Noclip => MoveMode::Ground,
@@ -219,7 +230,8 @@ pub fn fps_controller_move(
                     } else {
                         controller.fly_speed
                     };
-                    let mut move_to_world = Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
+                    let mut move_to_world =
+                        Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
                     velocity.linvel = move_to_world * input.movement * fly_speed;
@@ -231,13 +243,15 @@ pub fn fps_controller_move(
                     // Better than a ray cast as it handles when you are near the edge of a surface
                     let capsule = capsule.raw;
                     let cast_capsule = Collider::capsule(
-                        capsule.segment.a.into(), capsule.segment.b.into(),
+                        capsule.segment.a.into(),
+                        capsule.segment.b.into(),
                         capsule.radius * 0.9,
                     );
                     // Avoid self collisions
                     let filter = QueryFilter::default().exclude_rigid_body(entity);
                     let ground_cast = physics_context.cast_shape(
-                        transform.translation, transform.rotation,
+                        transform.translation,
+                        transform.rotation,
                         -Vec3::Y,
                         &cast_capsule,
                         0.125,
@@ -263,7 +277,8 @@ pub fn fps_controller_move(
                     wish_speed = f32::min(wish_speed, max_speed);
 
                     if let Some((_, toi)) = ground_cast {
-                        let has_traction = Vec3::dot(toi.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                        let has_traction =
+                            Vec3::dot(toi.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 && has_traction {
@@ -271,7 +286,8 @@ pub fn fps_controller_move(
                             if lateral_speed > controller.friction_speed_cutoff {
                                 let control = f32::max(lateral_speed, controller.stop_speed);
                                 let drop = control * controller.friction * dt;
-                                let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
+                                let new_speed =
+                                    f32::max((lateral_speed - drop) / lateral_speed, 0.0);
                                 velocity.linvel.x *= new_speed;
                                 velocity.linvel.z *= new_speed;
                             } else {
@@ -341,17 +357,17 @@ pub fn fps_controller_move(
                     controller.height = controller.height.clamp(crouch_height, upright_height);
 
                     if let Some(mut capsule) = collider.as_capsule_mut() {
-                        capsule.set_segment(
-                            Vec3::Y * 0.5,
-                            Vec3::Y * controller.height,
-                        );
+                        capsule.set_segment(Vec3::Y * 0.5, Vec3::Y * controller.height);
                     }
 
                     // Step offset
                     if controller.step_offset > f32::EPSILON && controller.ground_tick >= 1 {
-                        let cast_offset = velocity.linvel.normalize_or_zero() * controller.radius * 1.0625;
+                        let cast_offset =
+                            velocity.linvel.normalize_or_zero() * controller.radius * 1.0625;
                         let cast = physics_context.cast_ray_and_get_normal(
-                            transform.translation + cast_offset + Vec3::Y * controller.step_offset * 1.0625,
+                            transform.translation
+                                + cast_offset
+                                + Vec3::Y * controller.step_offset * 1.0625,
                             -Vec3::Y,
                             controller.step_offset * 0.9375,
                             false,
@@ -367,13 +383,27 @@ pub fn fps_controller_move(
                     if controller.ground_tick >= 1 && input.crouch {
                         for _ in 0..2 {
                             // Find the component of our velocity that is overhanging and subtract it off
-                            let overhang = overhang_component(entity, transform.as_ref(), physics_context.as_ref(), velocity.linvel, dt);
+                            let overhang = overhang_component(
+                                entity,
+                                transform.as_ref(),
+                                physics_context.as_ref(),
+                                velocity.linvel,
+                                dt,
+                            );
                             if let Some(overhang) = overhang {
                                 velocity.linvel -= overhang;
                             }
                         }
                         // If we are still overhanging consider unsolvable and freeze
-                        if overhang_component(entity, transform.as_ref(), physics_context.as_ref(), velocity.linvel, dt).is_some() {
+                        if overhang_component(
+                            entity,
+                            transform.as_ref(),
+                            physics_context.as_ref(),
+                            velocity.linvel,
+                            dt,
+                        )
+                        .is_some()
+                        {
                             velocity.linvel = Vec3::ZERO;
                         }
                     }
@@ -383,7 +413,13 @@ pub fn fps_controller_move(
     }
 }
 
-fn overhang_component(entity: Entity, transform: &Transform, physics_context: &RapierContext, velocity: Vec3, dt: f32) -> Option<Vec3> {
+fn overhang_component(
+    entity: Entity,
+    transform: &Transform,
+    physics_context: &RapierContext,
+    velocity: Vec3,
+    dt: f32,
+) -> Option<Vec3> {
     // Cast a segment (zero radius on capsule) from our next position back towards us
     // If there is a ledge in front of us we will hit the edge of it
     // We can use the normal of the hit to subtract off the component that is overhanging
@@ -391,7 +427,8 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
     let filter = QueryFilter::default().exclude_rigid_body(entity);
     let future_position = transform.translation + velocity * dt;
     let cast = physics_context.cast_shape(
-        future_position, transform.rotation,
+        future_position,
+        transform.rotation,
         -velocity,
         &cast_capsule,
         0.5,
@@ -399,7 +436,8 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
     );
     if let Some((_, toi)) = cast {
         let cast = physics_context.cast_ray(
-            future_position + Vec3::Y * 0.125, -Vec3::Y,
+            future_position + Vec3::Y * 0.125,
+            -Vec3::Y,
             0.375,
             false,
             filter,
@@ -414,7 +452,13 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
     None
 }
 
-fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, velocity: Vec3, dt: f32) -> Vec3 {
+fn acceleration(
+    wish_direction: Vec3,
+    wish_speed: f32,
+    acceleration: f32,
+    velocity: Vec3,
+    dt: f32,
+) -> Vec3 {
     let velocity_projection = Vec3::dot(velocity, wish_direction);
     let add_speed = wish_speed - velocity_projection;
     if add_speed <= 0.0 {
@@ -455,13 +499,15 @@ pub fn fps_controller_render(
     for (logical_transform, collider, controller, logical_player_id) in logical_query.iter() {
         if let Some(capsule) = collider.as_capsule() {
             for (mut render_transform, render_player_id) in render_query.iter_mut() {
-                if logical_player_id.0 != render_player_id.0 {
+                if logical_player_id.player_id != render_player_id.player_id {
                     continue;
                 }
                 // TODO: let this be more configurable
                 let camera_height = capsule.segment().b().y + capsule.radius() * 0.75;
-                render_transform.translation = logical_transform.translation + Vec3::Y * camera_height;
-                render_transform.rotation = Quat::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
+                render_transform.translation =
+                    logical_transform.translation + Vec3::Y * camera_height;
+                render_transform.rotation =
+                    Quat::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
             }
         }
     }

@@ -1,8 +1,8 @@
 use std::f32::consts::TAU;
 
 use bevy::{
-    gltf::{GltfMesh, GltfNode},
     gltf::Gltf,
+    gltf::{GltfMesh, GltfNode},
     math::Vec3Swizzles,
     prelude::*,
     window::CursorGrabMode,
@@ -30,11 +30,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut window: Query<&mut Window>,
-    assets: Res<AssetServer>,
-) {
+fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<AssetServer>) {
     let mut window = window.single_mut();
     window.title = String::from("Minimal FPS Controller Example");
     // commands.spawn(Window { title: "Minimal FPS Controller Example".to_string(), ..default() });
@@ -73,7 +69,7 @@ fn setup(
         GravityScale(0.0),
         Ccd { enabled: true }, // Prevent clipping when going fast
         TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
-        LogicalPlayer(0),
+        LogicalPlayer { player_id: 0 },
         FpsControllerInput {
             pitch: -TAU / 12.0,
             yaw: TAU * 5.0 / 8.0,
@@ -82,7 +78,7 @@ fn setup(
         FpsController {
             air_acceleration: 80.0,
             ..default()
-        }
+        },
     ));
     commands.spawn((
         Camera3dBundle {
@@ -92,7 +88,7 @@ fn setup(
             }),
             ..default()
         },
-        RenderPlayer(0),
+        RenderPlayer { player_id: 0 },
     ));
 
     commands.insert_resource(MainScene {
@@ -100,27 +96,28 @@ fn setup(
         is_loaded: false,
     });
 
-    commands.spawn(TextBundle::from_section(
-        "",
-        TextStyle {
-            font: assets.load("fira_mono.ttf"),
-            font_size: 24.0,
-            color: Color::BLACK,
-        },
-    ).with_style(Style {
-        position_type: PositionType::Absolute,
-        position: UiRect {
-            top: Val::Px(5.0),
-            left: Val::Px(5.0),
+    commands.spawn(
+        TextBundle::from_section(
+            "",
+            TextStyle {
+                font: assets.load("fira_mono.ttf"),
+                font_size: 24.0,
+                color: Color::BLACK,
+            },
+        )
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            position: UiRect {
+                top: Val::Px(5.0),
+                left: Val::Px(5.0),
+                ..default()
+            },
             ..default()
-        },
-        ..default()
-    }));
+        }),
+    );
 }
 
-fn respawn(
-    mut query: Query<(&mut Transform, &mut Velocity)>,
-) {
+fn respawn(mut query: Query<(&mut Transform, &mut Velocity)>) {
     for (mut transform, mut velocity) in &mut query {
         if transform.translation.y > -50.0 {
             continue;
@@ -153,10 +150,7 @@ fn scene_colliders(
 
     if let Some(gltf) = gltf {
         let scene = gltf.scenes.first().unwrap().clone();
-        commands.spawn(SceneBundle {
-            scene,
-            ..default()
-        });
+        commands.spawn(SceneBundle { scene, ..default() });
         for node in &gltf.nodes {
             let node = gltf_node_assets.get(&node).unwrap();
             if let Some(gltf_mesh) = node.mesh.clone() {
@@ -206,8 +200,12 @@ fn display_text(
         for mut text in &mut text_query {
             text.sections[0].value = format!(
                 "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}\nspd: {:.2}",
-                velocity.linvel.x, velocity.linvel.y, velocity.linvel.z,
-                transform.translation.x, transform.translation.y, transform.translation.z,
+                velocity.linvel.x,
+                velocity.linvel.y,
+                velocity.linvel.z,
+                transform.translation.x,
+                transform.translation.y,
+                transform.translation.z,
                 velocity.linvel.xz().length()
             );
         }
