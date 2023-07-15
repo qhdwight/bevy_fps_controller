@@ -10,8 +10,8 @@ readme = "README.md"
 description = "Bevy plugin that adds a Source engine inspired FPS movement controller"
 
 [dependencies]
-bevy = "0.10.1"
-bevy_rapier3d = "0.21.0"
+bevy = "0.11.0"
+bevy_rapier3d = "0.22.0"
 
 [[example]]
 name = "minimal"

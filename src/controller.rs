@@ -11,7 +11,7 @@ pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems((fps_controller_input, fps_controller_look, fps_controller_move, fps_controller_render).chain());
+        app.add_systems(Update, (fps_controller_input, fps_controller_look, fps_controller_move, fps_controller_render).chain());
     }
 }
 
@@ -124,10 +124,10 @@ impl Default for FpsController {
             key_right: KeyCode::D,
             key_up: KeyCode::Q,
             key_down: KeyCode::E,
-            key_sprint: KeyCode::LShift,
+            key_sprint: KeyCode::ShiftLeft,
             key_jump: KeyCode::Space,
             key_fly: KeyCode::F,
-            key_crouch: KeyCode::LControl,
+            key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
         }
     }

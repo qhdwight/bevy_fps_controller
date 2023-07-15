@@ -22,11 +22,11 @@ fn main() {
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
         .add_plugins(DefaultPlugins)
-        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        // .add_plugin(RapierDebugRenderPlugin::default())
-        .add_plugin(FpsControllerPlugin)
-        .add_startup_system(setup)
-        .add_systems((manage_cursor, scene_colliders, display_text, respawn))
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        // .add_plugins(RapierDebugRenderPlugin::default())
+        .add_plugins(FpsControllerPlugin)
+        .add_systems(Startup, setup)
+        .add_systems(Update, (manage_cursor, scene_colliders, display_text, respawn))
         .run();
 }
 
@@ -109,11 +109,8 @@ fn setup(
         },
     ).with_style(Style {
         position_type: PositionType::Absolute,
-        position: UiRect {
-            top: Val::Px(5.0),
-            left: Val::Px(5.0),
-            ..default()
-        },
+        top: Val::Px(5.0),
+        left: Val::Px(5.0),
         ..default()
     }));
 }
