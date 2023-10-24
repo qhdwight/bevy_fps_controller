@@ -22,9 +22,6 @@ pub enum MoveMode {
 }
 
 #[derive(Component)]
-pub struct LogicalPlayer(pub u8);
-
-#[derive(Component)]
 pub struct RenderPlayer {
     pub logical_entity: Entity,
 }
@@ -115,7 +112,7 @@ impl Default for FpsController {
             upright_height: 2.0,
             crouch_height: 1.25,
             acceleration: 10.0,
-            friction: 10.0,
+            friction: 15.0,
             traction_normal_cutoff: 0.7,
             friction_speed_cutoff: 0.1,
             fly_friction: 0.5,
@@ -197,15 +194,18 @@ pub fn fps_controller_move(
     mut query: Query<(
         Entity,
         &FpsControllerInput,
+        &KinematicCharacterControllerOutput,
         &mut FpsController,
         &mut Collider,
         &mut Transform,
-        &mut Velocity,
+        &mut KinematicCharacterController,
     )>,
 ) {
     let dt = time.delta_seconds();
 
-    for (entity, input, mut controller, mut collider, mut transform, mut velocity) in query.iter_mut() {
+    for (entity, input, output, mut controller, mut collider, transform, mut kinematics) in query.iter_mut() {
+        let mut linear_velocity = output.effective_translation / dt;
+
         if input.fly {
             controller.move_mode = match controller.move_mode {
                 MoveMode::Noclip => MoveMode::Ground,
@@ -217,9 +217,9 @@ pub fn fps_controller_move(
             MoveMode::Noclip => {
                 if input.movement == Vec3::ZERO {
                     let friction = controller.fly_friction.clamp(0.0, 1.0);
-                    velocity.linvel *= 1.0 - friction;
-                    if velocity.linvel.length_squared() < f32::EPSILON {
-                        velocity.linvel = Vec3::ZERO;
+                    linear_velocity *= 1.0 - friction;
+                    if linear_velocity.length_squared() < f32::EPSILON {
+                        linear_velocity = Vec3::ZERO;
                     }
                 } else {
                     let fly_speed = if input.sprint {
@@ -230,164 +230,125 @@ pub fn fps_controller_move(
                     let mut move_to_world = Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
-                    velocity.linvel = move_to_world * input.movement * fly_speed;
+                    linear_velocity = move_to_world * input.movement * fly_speed;
                 }
             }
             MoveMode::Ground => {
-                if let Some(capsule) = collider.as_capsule() {
-                    // Capsule cast downwards to find ground
-                    // Better than a ray cast as it handles when you are near the edge of a surface
-                    let capsule = capsule.raw;
-                    let cast_capsule = Collider::capsule(
-                        capsule.segment.a.into(), capsule.segment.b.into(),
-                        capsule.radius * 0.9,
+                let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
+                let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
+                move_to_world.z_axis *= -1.0; // Forward is -Z
+                let mut wish_direction = move_to_world * (input.movement * speeds);
+                let mut wish_speed = wish_direction.length();
+                if wish_speed > f32::EPSILON {
+                    // Avoid division by zero
+                    wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
+                }
+                let max_speed = if input.crouch {
+                    controller.crouched_speed
+                } else if input.sprint {
+                    controller.run_speed
+                } else {
+                    controller.walk_speed
+                };
+                wish_speed = f32::min(wish_speed, max_speed);
+
+                if output.grounded {
+                    // let ground_collision = output.collisions.first().filter(|collision| {
+                    //     Vec3::dot(collision.toi.normal1, Vec3::Y) > controller.traction_normal_cutoff
+                    // });
+
+                    // Only apply friction after at least one tick, allows b-hopping without losing speed
+                    if controller.ground_tick >= 1 {
+                        let lateral_speed = linear_velocity.xz().length();
+                        if lateral_speed > controller.friction_speed_cutoff {
+                            let control = f32::max(lateral_speed, controller.stop_speed);
+                            let drop = control * controller.friction * dt;
+                            let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
+                            linear_velocity.x *= new_speed;
+                            linear_velocity.z *= new_speed;
+                        } else {
+                            linear_velocity = Vec3::ZERO;
+                        }
+                    }
+
+                    let add = acceleration(
+                        wish_direction,
+                        wish_speed,
+                        controller.acceleration,
+                        linear_velocity,
+                        dt,
                     );
-                    // Avoid self collisions
-                    let filter = QueryFilter::default().exclude_rigid_body(entity);
-                    let ground_cast = physics_context.cast_shape(
-                        transform.translation, transform.rotation,
-                        -Vec3::Y,
-                        &cast_capsule,
-                        0.125,
-                        filter,
+                    linear_velocity += add;
+
+                    // let linear_velocity = controller.linear_velocity;
+                    // controller.linear_velocity -= Vec3::dot(linear_velocity, collision.toi.normal1) * collision.toi.normal1;
+
+                    if input.jump {
+                        linear_velocity.y = controller.jump_speed;
+                    }
+
+                    // Increment ground tick but cap at max value
+                    controller.ground_tick = controller.ground_tick.saturating_add(1);
+                } else {
+                    controller.ground_tick = 0;
+                    wish_speed = f32::min(wish_speed, controller.air_speed_cap);
+
+                    let mut add = acceleration(
+                        wish_direction,
+                        wish_speed,
+                        controller.air_acceleration,
+                        linear_velocity,
+                        dt,
                     );
+                    add.y = -controller.gravity * dt;
+                    linear_velocity += add;
 
-                    let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
-                    let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
-                    move_to_world.z_axis *= -1.0; // Forward is -Z
-                    let mut wish_direction = move_to_world * (input.movement * speeds);
-                    let mut wish_speed = wish_direction.length();
-                    if wish_speed > f32::EPSILON {
-                        // Avoid division by zero
-                        wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
+                    let air_speed = linear_velocity.xz().length();
+                    if air_speed > controller.max_air_speed {
+                        let ratio = controller.max_air_speed / air_speed;
+                        linear_velocity.x *= ratio;
+                        linear_velocity.z *= ratio;
                     }
-                    let max_speed = if input.crouch {
-                        controller.crouched_speed
-                    } else if input.sprint {
-                        controller.run_speed
-                    } else {
-                        controller.walk_speed
-                    };
-                    wish_speed = f32::min(wish_speed, max_speed);
+                }
 
-                    if let Some((_, toi)) = ground_cast {
-                        let has_traction = Vec3::dot(toi.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                /* Crouching */
 
-                        // Only apply friction after at least one tick, allows b-hopping without losing speed
-                        if controller.ground_tick >= 1 && has_traction {
-                            let lateral_speed = velocity.linvel.xz().length();
-                            if lateral_speed > controller.friction_speed_cutoff {
-                                let control = f32::max(lateral_speed, controller.stop_speed);
-                                let drop = control * controller.friction * dt;
-                                let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
-                                velocity.linvel.x *= new_speed;
-                                velocity.linvel.z *= new_speed;
-                            } else {
-                                velocity.linvel = Vec3::ZERO;
-                            }
-                            if controller.ground_tick == 1 {
-                                velocity.linvel.y = -toi.toi;
-                            }
-                        }
+                let crouch_height = controller.crouch_height;
+                let upright_height = controller.upright_height;
 
-                        let mut add = acceleration(
-                            wish_direction,
-                            wish_speed,
-                            controller.acceleration,
-                            velocity.linvel,
-                            dt,
-                        );
-                        if !has_traction {
-                            add.y -= controller.gravity * dt;
-                        }
-                        velocity.linvel += add;
+                let crouch_speed = if input.crouch {
+                    -controller.crouch_speed
+                } else {
+                    controller.uncrouch_speed
+                };
+                controller.height += dt * crouch_speed;
+                controller.height = controller.height.clamp(crouch_height, upright_height);
 
-                        if has_traction {
-                            let linvel = velocity.linvel;
-                            velocity.linvel -= Vec3::dot(linvel, toi.normal1) * toi.normal1;
+                if let Some(mut capsule) = collider.as_capsule_mut() {
+                    capsule.set_segment(
+                        Vec3::Y * 0.5,
+                        Vec3::Y * controller.height,
+                    );
+                }
 
-                            if input.jump {
-                                velocity.linvel.y = controller.jump_speed;
-                            }
-                        }
-
-                        // Increment ground tick but cap at max value
-                        controller.ground_tick = controller.ground_tick.saturating_add(1);
-                    } else {
-                        controller.ground_tick = 0;
-                        wish_speed = f32::min(wish_speed, controller.air_speed_cap);
-
-                        let mut add = acceleration(
-                            wish_direction,
-                            wish_speed,
-                            controller.air_acceleration,
-                            velocity.linvel,
-                            dt,
-                        );
-                        add.y = -controller.gravity * dt;
-                        velocity.linvel += add;
-
-                        let air_speed = velocity.linvel.xz().length();
-                        if air_speed > controller.max_air_speed {
-                            let ratio = controller.max_air_speed / air_speed;
-                            velocity.linvel.x *= ratio;
-                            velocity.linvel.z *= ratio;
+                // Prevent falling off ledges
+                if controller.ground_tick >= 1 && input.crouch {
+                    for _ in 0..2 {
+                        // Find the component of our velocity that is overhanging and subtract it off
+                        let overhang = overhang_component(entity, transform.as_ref(), physics_context.as_ref(), linear_velocity, dt);
+                        if let Some(overhang) = overhang {
+                            linear_velocity -= overhang;
                         }
                     }
-
-                    /* Crouching */
-
-                    let crouch_height = controller.crouch_height;
-                    let upright_height = controller.upright_height;
-
-                    let crouch_speed = if input.crouch {
-                        -controller.crouch_speed
-                    } else {
-                        controller.uncrouch_speed
-                    };
-                    controller.height += dt * crouch_speed;
-                    controller.height = controller.height.clamp(crouch_height, upright_height);
-
-                    if let Some(mut capsule) = collider.as_capsule_mut() {
-                        capsule.set_segment(
-                            Vec3::Y * 0.5,
-                            Vec3::Y * controller.height,
-                        );
-                    }
-
-                    // Step offset
-                    if controller.step_offset > f32::EPSILON && controller.ground_tick >= 1 {
-                        let cast_offset = velocity.linvel.normalize_or_zero() * controller.radius * 1.0625;
-                        let cast = physics_context.cast_ray_and_get_normal(
-                            transform.translation + cast_offset + Vec3::Y * controller.step_offset * 1.0625,
-                            -Vec3::Y,
-                            controller.step_offset * 0.9375,
-                            false,
-                            filter,
-                        );
-                        if let Some((_, hit)) = cast {
-                            transform.translation.y += controller.step_offset * 1.0625 - hit.toi;
-                            transform.translation += cast_offset;
-                        }
-                    }
-
-                    // Prevent falling off ledges
-                    if controller.ground_tick >= 1 && input.crouch {
-                        for _ in 0..2 {
-                            // Find the component of our velocity that is overhanging and subtract it off
-                            let overhang = overhang_component(entity, transform.as_ref(), physics_context.as_ref(), velocity.linvel, dt);
-                            if let Some(overhang) = overhang {
-                                velocity.linvel -= overhang;
-                            }
-                        }
-                        // If we are still overhanging consider unsolvable and freeze
-                        if overhang_component(entity, transform.as_ref(), physics_context.as_ref(), velocity.linvel, dt).is_some() {
-                            velocity.linvel = Vec3::ZERO;
-                        }
+                    // If we are still overhanging consider unsolvable and freeze
+                    if overhang_component(entity, transform.as_ref(), physics_context.as_ref(), linear_velocity, dt).is_some() {
+                        linear_velocity = Vec3::ZERO;
                     }
                 }
             }
         }
+
+        kinematics.translation = Some(linear_velocity * dt);
     }
 }
 
@@ -454,7 +415,7 @@ fn get_axis(key_input: &Res<Input<KeyCode>>, key_pos: KeyCode, key_neg: KeyCode)
 
 pub fn fps_controller_render(
     mut render_query: Query<(&mut Transform, &RenderPlayer), With<RenderPlayer>>,
-    logical_query: Query<(&Transform, &Collider, &FpsController, &CameraConfig), (With<LogicalPlayer>, Without<RenderPlayer>)>,
+    logical_query: Query<(&Transform, &Collider, &FpsController, &CameraConfig), Without<RenderPlayer>>,
 ) {
     for (mut render_transform, render_player) in render_query.iter_mut() {
         if let Ok((logical_transform, collider, controller, camera_config)) = logical_query.get(render_player.logical_entity) {

@@ -57,24 +57,20 @@ fn setup(
     let logical_entity = commands
         .spawn((
             Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
-            Friction {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Min,
-            },
-            Restitution {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Min,
-            },
-            ActiveEvents::COLLISION_EVENTS,
-            Velocity::zero(),
-            RigidBody::Dynamic,
-            Sleeping::disabled(),
-            LockedAxes::ROTATION_LOCKED,
-            AdditionalMassProperties::Mass(1.0),
-            GravityScale(0.0),
-            Ccd { enabled: true }, // Prevent clipping when going fast
             TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
-            LogicalPlayer(0),
+            KinematicCharacterControllerOutput::default(),
+            KinematicCharacterController {
+                max_slope_climb_angle: 45.0_f32.to_radians(),
+                min_slope_slide_angle: 30.0_f32.to_radians(),
+                snap_to_ground: Some(CharacterLength::Absolute(0.2)),
+                offset: CharacterLength::Absolute(0.01),
+                autostep: Some(CharacterAutostep {
+                    max_height: CharacterLength::Absolute(0.2),
+                    min_width: CharacterLength::Absolute(0.5),
+                    include_dynamic_bodies: true,
+                }),
+                ..default()
+            },
             FpsControllerInput {
                 pitch: -TAU / 12.0,
                 yaw: TAU * 5.0 / 8.0,
@@ -84,11 +80,11 @@ fn setup(
                 air_acceleration: 80.0,
                 ..default()
             },
+            CameraConfig {
+                height_offset: 0.0,
+                radius_scale: 0.75,
+            },
         ))
-        .insert(CameraConfig {
-            height_offset: 0.0,
-            radius_scale: 0.75,
-        })
         .id();
 
     commands.spawn((
@@ -203,16 +199,18 @@ fn manage_cursor(
 }
 
 fn display_text(
-    mut controller_query: Query<(&Transform, &Velocity)>,
+    time: Res<Time>,
+    mut controller_query: Query<(&Transform, &KinematicCharacterControllerOutput)>,
     mut text_query: Query<&mut Text>,
 ) {
-    for (transform, velocity) in &mut controller_query {
+    for (transform, kinematics) in &mut controller_query {
+        let linear_velocity = kinematics.effective_translation / time.delta_seconds();
         for mut text in &mut text_query {
             text.sections[0].value = format!(
                 "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}\nspd: {:.2}",
-                velocity.linvel.x, velocity.linvel.y, velocity.linvel.z,
+                linear_velocity.x, linear_velocity.y, linear_velocity.z,
                 transform.translation.x, transform.translation.y, transform.translation.z,
-                velocity.linvel.xz().length()
+                linear_velocity.xz().length()
             );
         }
     }
