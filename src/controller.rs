@@ -26,7 +26,6 @@ pub struct LogicalPlayer(pub u8);
 
 #[derive(Component)]
 pub struct RenderPlayer {
-    pub id: u8,
     pub logical_entity: Entity,
 }
 

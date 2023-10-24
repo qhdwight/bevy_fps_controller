@@ -20,7 +20,7 @@ Inspired from Source engine movement, this plugin implements movement suitable f
 See [main.rs](./examples/minimal.rs)
 
 ```bash
-cargo run --example minimal
+cargo run --release --example minimal
 ```
 
 ```rust
@@ -76,10 +76,7 @@ fn setup(mut commands: Commands, ...) {
 
     commands.spawn((
         Camera3dBundle::default(),
-        RenderPlayer {
-            id: 0,
-            logical_entity,
-        },
+        RenderPlayer { logical_entity },
     ));
     ...
 }

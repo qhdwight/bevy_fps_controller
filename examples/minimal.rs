@@ -99,10 +99,7 @@ fn setup(
             }),
             ..default()
         },
-        RenderPlayer {
-            id: 0,
-            logical_entity,
-        },
+        RenderPlayer { logical_entity },
     ));
 
     commands.insert_resource(MainScene {
