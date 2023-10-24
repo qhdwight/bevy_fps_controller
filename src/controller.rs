@@ -25,7 +25,16 @@ pub enum MoveMode {
 pub struct LogicalPlayer(pub u8);
 
 #[derive(Component)]
-pub struct RenderPlayer(pub u8);
+pub struct RenderPlayer {
+    pub id: u8,
+    pub logical_entity: Entity,
+}
+
+#[derive(Component)]
+pub struct CameraConfig {
+    pub height_offset: f32,
+    pub radius_scale: f32,
+}
 
 #[derive(Component, Default)]
 pub struct FpsControllerInput {
@@ -445,21 +454,13 @@ fn get_axis(key_input: &Res<Input<KeyCode>>, key_pos: KeyCode, key_neg: KeyCode)
 // ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝
 
 pub fn fps_controller_render(
-    logical_query: Query<
-        (&Transform, &Collider, &FpsController, &LogicalPlayer),
-        With<LogicalPlayer>,
-    >,
-    mut render_query: Query<(&mut Transform, &RenderPlayer), Without<LogicalPlayer>>,
+    mut render_query: Query<(&mut Transform, &RenderPlayer), With<RenderPlayer>>,
+    logical_query: Query<(&Transform, &Collider, &FpsController, &CameraConfig), (With<LogicalPlayer>, Without<RenderPlayer>)>,
 ) {
-    // TODO: inefficient O(N^2) loop, use hash map?
-    for (logical_transform, collider, controller, logical_player_id) in logical_query.iter() {
-        if let Some(capsule) = collider.as_capsule() {
-            for (mut render_transform, render_player_id) in render_query.iter_mut() {
-                if logical_player_id.0 != render_player_id.0 {
-                    continue;
-                }
-                // TODO: let this be more configurable
-                let camera_height = capsule.segment().b().y + capsule.radius() * 0.75;
+    for (mut render_transform, render_player) in render_query.iter_mut() {
+        if let Ok((logical_transform, collider, controller, camera_config)) = logical_query.get(render_player.logical_entity) {
+            if let Some(capsule) = collider.as_capsule() {
+                let camera_height = capsule.segment().b().y + capsule.radius() * camera_config.radius_scale + camera_config.height_offset;
                 render_transform.translation = logical_transform.translation + Vec3::Y * camera_height;
                 render_transform.rotation = Quat::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
             }
