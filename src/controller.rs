@@ -7,11 +7,45 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::*;
 
+/// Manages the FPS controllers. Executes in `PreUpdate`, after bevy's internal
+/// input processing is finished.
+/// 
+/// If you need a system in `PreUpdate` to execute after FPS Controller's systems, 
+/// Do it like so:
+/// 
+/// ```
+/// # use bevy::prelude::*;
+/// 
+/// struct MyPlugin;
+/// impl Plugin for MyPlugin {
+///     fn build(&self, app: &mut App) {
+///         app.add_systems(
+///             PreUpdate,
+///             (my_system).after( bevy_fps_controller::controller::fps_controller_render )
+///         );
+///     }
+/// }
+/// 
+/// fn my_system() { }
+/// ```
 pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(First, (fps_controller_input, fps_controller_look, fps_controller_move, fps_controller_render).chain());
+        use bevy::input::{ mouse, keyboard, gamepad, touch };
+
+        app.add_systems(
+            PreUpdate, 
+            (fps_controller_input, fps_controller_look, fps_controller_move, fps_controller_render)
+                .chain()
+                .after( mouse::mouse_button_input_system )
+                .after( keyboard::keyboard_input_system )
+                .after( gamepad::gamepad_axis_event_system )
+                .after( gamepad::gamepad_button_event_system )
+                .after( gamepad::gamepad_connection_system )
+                .after( gamepad::gamepad_event_system )
+                .after( touch::touch_screen_input_system )
+        );
     }
 }
 
