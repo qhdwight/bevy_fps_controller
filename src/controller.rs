@@ -249,6 +249,7 @@ pub fn fps_controller_move(
                         -Vec3::Y,
                         &cast_capsule,
                         0.125,
+                        false,
                         filter,
                     );
 
@@ -271,7 +272,8 @@ pub fn fps_controller_move(
                     wish_speed = f32::min(wish_speed, max_speed);
 
                     if let Some((_, toi)) = ground_cast {
-                        let has_traction = Vec3::dot(toi.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                        let toi_details = toi.details.unwrap();
+                        let has_traction = Vec3::dot(toi_details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 && has_traction {
@@ -304,7 +306,7 @@ pub fn fps_controller_move(
 
                         if has_traction {
                             let linvel = velocity.linvel;
-                            velocity.linvel -= Vec3::dot(linvel, toi.normal1) * toi.normal1;
+                            velocity.linvel -= Vec3::dot(linvel, toi_details.normal1) * toi_details.normal1;
 
                             if input.jump {
                                 velocity.linvel.y = controller.jump_speed;
@@ -403,9 +405,11 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
         -velocity,
         &cast_capsule,
         0.5,
+        false,
         filter,
     );
     if let Some((_, toi)) = cast {
+        let toi_details = toi.details.unwrap();
         let cast = physics_context.cast_ray(
             future_position + Vec3::Y * 0.125, -Vec3::Y,
             0.375,
@@ -414,7 +418,7 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
         );
         // Make sure that this is actually a ledge, e.g. there is no ground in front of us
         if cast.is_none() {
-            let normal = -toi.normal1;
+            let normal = -toi_details.normal1;
             let alignment = Vec3::dot(velocity, normal);
             return Some(alignment * normal);
         }
