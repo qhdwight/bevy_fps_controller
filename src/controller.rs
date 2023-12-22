@@ -249,7 +249,7 @@ pub fn fps_controller_move(
                         -Vec3::Y,
                         &cast_capsule,
                         0.125,
-                        false,
+                        true,
                         filter,
                     );
 
@@ -413,7 +413,7 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
         -velocity,
         &cast_capsule,
         0.5,
-        false,
+        true,
         filter,
     );
     if let Some((_, toi)) = cast {
