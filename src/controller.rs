@@ -271,8 +271,7 @@ pub fn fps_controller_move(
                     };
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if let Some((_, toi)) = ground_cast {
-                        let toi_details = toi.details.unwrap();
+                    if let Some((toi, toi_details)) = toi_details_unwrap(ground_cast) {
                         let has_traction = Vec3::dot(toi_details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
@@ -391,6 +390,15 @@ pub fn fps_controller_move(
             }
         }
     }
+}
+
+fn toi_details_unwrap(ground_cast: Option<(Entity, Toi)>) -> Option<(Toi, ToiDetails)> {
+    if let Some((_, toi)) = ground_cast {
+        if let Some(details) = toi.details {
+            return Some((toi, details));
+        }
+    }
+    None
 }
 
 fn overhang_component(entity: Entity, transform: &Transform, physics_context: &RapierContext, velocity: Vec3, dt: f32) -> Option<Vec3> {
