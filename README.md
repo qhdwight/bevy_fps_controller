@@ -60,7 +60,7 @@ fn setup(mut commands: Commands, ...) {
             GravityScale(0.0),
             Ccd { enabled: true }, // Prevent clipping when going fast
             TransformBundle::from_transform(Transform::from_xyz(0.0, 3.0, 0.0)),
-            LogicalPlayer(0),
+            LogicalPlayer,
             FpsControllerInput {
                 pitch: -TAU / 12.0,
                 yaw: TAU * 5.0 / 8.0,
