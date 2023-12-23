@@ -162,7 +162,7 @@ fn scene_colliders(
             ..default()
         });
         for node in &gltf.nodes {
-            let node = gltf_node_assets.get(&node).unwrap();
+            let node = gltf_node_assets.get(node).unwrap();
             if let Some(gltf_mesh) = node.mesh.clone() {
                 let gltf_mesh = gltf_mesh_assets.get(&gltf_mesh).unwrap();
                 for mesh_primitive in &gltf_mesh.primitives {

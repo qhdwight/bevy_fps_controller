@@ -249,6 +249,7 @@ pub fn fps_controller_move(
                         -Vec3::Y,
                         &cast_capsule,
                         0.125,
+                        true,
                         filter,
                     );
 
@@ -270,8 +271,8 @@ pub fn fps_controller_move(
                     };
                     wish_speed = f32::min(wish_speed, max_speed);
 
-                    if let Some((_, toi)) = ground_cast {
-                        let has_traction = Vec3::dot(toi.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                    if let Some((toi, toi_details)) = toi_details_unwrap(ground_cast) {
+                        let has_traction = Vec3::dot(toi_details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 && has_traction {
@@ -304,7 +305,7 @@ pub fn fps_controller_move(
 
                         if has_traction {
                             let linvel = velocity.linvel;
-                            velocity.linvel -= Vec3::dot(linvel, toi.normal1) * toi.normal1;
+                            velocity.linvel -= Vec3::dot(linvel, toi_details.normal1) * toi_details.normal1;
 
                             if input.jump {
                                 velocity.linvel.y = controller.jump_speed;
@@ -391,6 +392,15 @@ pub fn fps_controller_move(
     }
 }
 
+fn toi_details_unwrap(ground_cast: Option<(Entity, Toi)>) -> Option<(Toi, ToiDetails)> {
+    if let Some((_, toi)) = ground_cast {
+        if let Some(details) = toi.details {
+            return Some((toi, details));
+        }
+    }
+    None
+}
+
 fn overhang_component(entity: Entity, transform: &Transform, physics_context: &RapierContext, velocity: Vec3, dt: f32) -> Option<Vec3> {
     // Cast a segment (zero radius on capsule) from our next position back towards us
     // If there is a ledge in front of us we will hit the edge of it
@@ -403,9 +413,11 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
         -velocity,
         &cast_capsule,
         0.5,
+        true,
         filter,
     );
     if let Some((_, toi)) = cast {
+        let toi_details = toi.details.unwrap();
         let cast = physics_context.cast_ray(
             future_position + Vec3::Y * 0.125, -Vec3::Y,
             0.375,
@@ -414,7 +426,7 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
         );
         // Make sure that this is actually a ledge, e.g. there is no ground in front of us
         if cast.is_none() {
-            let normal = -toi.normal1;
+            let normal = -toi_details.normal1;
             let alignment = Vec3::dot(velocity, normal);
             return Some(alignment * normal);
         }
