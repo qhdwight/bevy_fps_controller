@@ -9,13 +9,13 @@ use bevy_rapier3d::prelude::*;
 
 /// Manages the FPS controllers. Executes in `PreUpdate`, after bevy's internal
 /// input processing is finished.
-/// 
+///
 /// If you need a system in `PreUpdate` to execute after FPS Controller's systems, 
 /// Do it like so:
-/// 
+///
 /// ```
 /// # use bevy::prelude::*;
-/// 
+///
 /// struct MyPlugin;
 /// impl Plugin for MyPlugin {
 ///     fn build(&self, app: &mut App) {
@@ -25,26 +25,26 @@ use bevy_rapier3d::prelude::*;
 ///         );
 ///     }
 /// }
-/// 
+///
 /// fn my_system() { }
 /// ```
 pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        use bevy::input::{ mouse, keyboard, gamepad, touch };
+        use bevy::input::{mouse, keyboard, gamepad, touch};
 
         app.add_systems(
-            PreUpdate, 
+            PreUpdate,
             (fps_controller_input, fps_controller_look, fps_controller_move, fps_controller_render)
                 .chain()
-                .after( mouse::mouse_button_input_system )
-                .after( keyboard::keyboard_input_system )
-                .after( gamepad::gamepad_axis_event_system )
-                .after( gamepad::gamepad_button_event_system )
-                .after( gamepad::gamepad_connection_system )
-                .after( gamepad::gamepad_event_system )
-                .after( touch::touch_screen_input_system )
+                .after(mouse::mouse_button_input_system)
+                .after(keyboard::keyboard_input_system)
+                .after(gamepad::gamepad_axis_event_system)
+                .after(gamepad::gamepad_button_event_system)
+                .after(gamepad::gamepad_connection_system)
+                .after(gamepad::gamepad_event_system)
+                .after(touch::touch_screen_input_system),
         );
     }
 }
@@ -56,7 +56,7 @@ pub enum MoveMode {
 }
 
 #[derive(Component)]
-pub struct LogicalPlayer(pub u8);
+pub struct LogicalPlayer;
 
 #[derive(Component)]
 pub struct RenderPlayer {
@@ -195,7 +195,7 @@ pub fn fps_controller_input(
         }
 
         let mut mouse_delta = Vec2::ZERO;
-        for mouse_event in mouse_events.iter() {
+        for mouse_event in mouse_events.read() {
             mouse_delta += mouse_event.delta;
         }
         mouse_delta *= controller.sensitivity;
@@ -450,8 +450,7 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
         true,
         filter,
     );
-    if let Some((_, toi)) = cast {
-        let toi_details = toi.details.unwrap();
+    if let Some((_, toi_details)) = toi_details_unwrap(cast) {
         let cast = physics_context.cast_ray(
             future_position + Vec3::Y * 0.125, -Vec3::Y,
             0.375,

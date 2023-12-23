@@ -5,7 +5,7 @@
 
 Inspired from Source engine movement, this plugin implements movement suitable for FPS games.
 
-⚠️ Feedback requested! Still in early stages, feel free to make issues/PRs
+Feel free to make issues/PRs!
 
 ### Features
 

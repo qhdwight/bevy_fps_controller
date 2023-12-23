@@ -74,7 +74,7 @@ fn setup(
             GravityScale(0.0),
             Ccd { enabled: true }, // Prevent clipping when going fast
             TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
-            LogicalPlayer(0),
+            LogicalPlayer,
             FpsControllerInput {
                 pitch: -TAU / 12.0,
                 yaw: TAU * 5.0 / 8.0,
