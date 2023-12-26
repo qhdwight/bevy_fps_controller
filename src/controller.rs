@@ -125,6 +125,7 @@ pub struct FpsController {
     pub key_jump: KeyCode,
     pub key_fly: KeyCode,
     pub key_crouch: KeyCode,
+    pub surf_allowed: bool,
 }
 
 impl Default for FpsController {
@@ -171,6 +172,7 @@ impl Default for FpsController {
             key_fly: KeyCode::F,
             key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
+            surf_allowed: true,
         }
     }
 }
@@ -337,8 +339,13 @@ pub fn fps_controller_move(
                             add.y -= controller.gravity * dt;
                             // Prevent walking up slopes
                             if traction < controller.traction_normal_cutoff && traction != 0.0 {
-                                add.x = 0.0;
-                                add.z = 0.0;
+                                if controller.surf_allowed {
+                                    add.x *= 0.2;
+                                    add.z *= 0.2;
+                                } else {
+                                    add.x = 0.0;
+                                    add.z = 0.0;
+                                }
                             }
                         }
                         velocity.linvel += add;
