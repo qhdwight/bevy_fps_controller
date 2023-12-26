@@ -306,7 +306,8 @@ pub fn fps_controller_move(
                     wish_speed = f32::min(wish_speed, max_speed);
 
                     if let Some((toi, toi_details)) = toi_details_unwrap(ground_cast) {
-                        let has_traction = Vec3::dot(toi_details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                        let traction = Vec3::dot(toi_details.normal1, Vec3::Y);
+                        let has_traction = traction > controller.traction_normal_cutoff;
 
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 && has_traction {
@@ -332,8 +333,13 @@ pub fn fps_controller_move(
                             velocity.linvel,
                             dt,
                         );
-                        if !has_traction {
+                        if !has_traction { 
                             add.y -= controller.gravity * dt;
+                            // Prevent walking up slopes
+                            if traction < controller.traction_normal_cutoff && traction != 0.0 {
+                                add.x = 0.0;
+                                add.z = 0.0;
+                            }
                         }
                         velocity.linvel += add;
 
