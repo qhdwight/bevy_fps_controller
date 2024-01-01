@@ -85,6 +85,7 @@ pub struct FpsController {
     pub move_mode: MoveMode,
     pub radius: f32,
     pub gravity: f32,
+    pub always_run: bool,
     pub walk_speed: f32,
     pub run_speed: f32,
     pub forward_speed: f32,
@@ -135,6 +136,7 @@ impl Default for FpsController {
             fly_speed: 10.0,
             fast_fly_speed: 30.0,
             gravity: 23.0,
+            always_run: false,
             walk_speed: 9.0,
             run_speed: 14.0,
             forward_speed: 30.0,
@@ -211,7 +213,13 @@ pub fn fps_controller_input(
             get_axis(&key_input, controller.key_up, controller.key_down),
             get_axis(&key_input, controller.key_forward, controller.key_back),
         );
-        input.sprint = key_input.pressed(controller.key_sprint);
+
+        if controller.always_run {
+            input.sprint = !key_input.pressed(controller.key_sprint);
+        } else {
+            input.sprint = key_input.pressed(controller.key_sprint);
+        }
+
         input.jump = key_input.pressed(controller.key_jump);
         input.fly = key_input.just_pressed(controller.key_fly);
         input.crouch = key_input.pressed(controller.key_crouch);
