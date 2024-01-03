@@ -334,19 +334,10 @@ pub fn fps_controller_move(
                             controller.acceleration,
                             velocity.linvel,
                             dt,
+                            controller.max_air_speed,
                         );
                         if !has_traction { 
                             add.y -= controller.gravity * dt;
-                            // Prevent walking up slopes
-                            if traction < controller.traction_normal_cutoff && traction != 0.0 {
-                                if controller.surf_allowed {
-                                    add.x *= 0.2;
-                                    add.z *= 0.2;
-                                } else {
-                                    add.x = 0.0;
-                                    add.z = 0.0;
-                                }
-                            }
                         }
                         velocity.linvel += add;
 
@@ -371,6 +362,7 @@ pub fn fps_controller_move(
                             controller.air_acceleration,
                             velocity.linvel,
                             dt,
+                            controller.max_air_speed,
                         );
                         add.y = -controller.gravity * dt;
                         velocity.linvel += add;
@@ -480,7 +472,7 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
     None
 }
 
-fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, velocity: Vec3, dt: f32) -> Vec3 {
+fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, velocity: Vec3, dt: f32, max_speed: f32) -> Vec3 {
     let velocity_projection = Vec3::dot(velocity, wish_direction);
     let add_speed = wish_speed - velocity_projection;
     if add_speed <= 0.0 {
@@ -488,7 +480,11 @@ fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, veloci
     }
 
     let acceleration_speed = f32::min(acceleration * wish_speed * dt, add_speed);
-    wish_direction * acceleration_speed
+    let result = wish_direction * acceleration_speed;
+    if result.length() > max_speed {
+        return Vec3::ZERO;
+    }
+    result
 }
 
 fn get_pressed(key_input: &Res<Input<KeyCode>>, key: KeyCode) -> f32 {
