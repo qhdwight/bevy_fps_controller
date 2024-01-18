@@ -7,6 +7,8 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::*;
 
+const GRAVITY_MODIFIER: f32 = 0.13043478;
+
 /// Manages the FPS controllers. Executes in `PreUpdate`, after bevy's internal
 /// input processing is finished.
 ///
@@ -125,6 +127,7 @@ pub struct FpsController {
     pub key_jump: KeyCode,
     pub key_fly: KeyCode,
     pub key_crouch: KeyCode,
+    pub surf_allowed: bool,
 }
 
 impl Default for FpsController {
@@ -171,6 +174,7 @@ impl Default for FpsController {
             key_fly: KeyCode::F,
             key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
+            surf_allowed: true,
         }
     }
 }
@@ -306,7 +310,9 @@ pub fn fps_controller_move(
                     wish_speed = f32::min(wish_speed, max_speed);
 
                     if let Some((toi, toi_details)) = toi_details_unwrap(ground_cast) {
-                        let has_traction = Vec3::dot(toi_details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                        let traction = Vec3::dot(toi_details.normal1, Vec3::Y);
+                        let has_traction = traction > controller.traction_normal_cutoff;
+
 
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 && has_traction {
@@ -320,10 +326,12 @@ pub fn fps_controller_move(
                             } else {
                                 velocity.linvel = Vec3::ZERO;
                             }
-                            if controller.ground_tick == 1 {
+                            /*if controller.ground_tick == 1 {
                                 velocity.linvel.y = -toi.toi;
-                            }
+                            }*/
                         }
+
+                        velocity.linvel.y = -toi.toi;
 
                         let mut add = acceleration(
                             wish_direction,
@@ -331,9 +339,10 @@ pub fn fps_controller_move(
                             controller.acceleration,
                             velocity.linvel,
                             dt,
+                            controller.max_air_speed,
                         );
-                        if !has_traction {
-                            add.y -= controller.gravity * dt;
+                        if !has_traction { 
+                            add.y -= controller.gravity * dt; //* (controller.gravity * GRAVITY_MODIFIER);
                         }
                         velocity.linvel += add;
 
@@ -358,6 +367,7 @@ pub fn fps_controller_move(
                             controller.air_acceleration,
                             velocity.linvel,
                             dt,
+                            controller.max_air_speed,
                         );
                         add.y = -controller.gravity * dt;
                         velocity.linvel += add;
@@ -467,15 +477,21 @@ fn overhang_component(entity: Entity, transform: &Transform, physics_context: &R
     None
 }
 
-fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, velocity: Vec3, dt: f32) -> Vec3 {
+fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, velocity: Vec3, dt: f32, max_speed: f32) -> Vec3 {
     let velocity_projection = Vec3::dot(velocity, wish_direction);
     let add_speed = wish_speed - velocity_projection;
     if add_speed <= 0.0 {
         return Vec3::ZERO;
     }
 
+
     let acceleration_speed = f32::min(acceleration * wish_speed * dt, add_speed);
-    wish_direction * acceleration_speed
+    let result = wish_direction * acceleration_speed;
+    if result.length() > max_speed {
+        return Vec3::ZERO;
+    }
+
+    result
 }
 
 fn get_pressed(key_input: &Res<Input<KeyCode>>, key: KeyCode) -> f32 {
