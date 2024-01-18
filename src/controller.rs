@@ -7,6 +7,8 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::*;
 
+const GRAVITY_MODIFIER: f32 = 0.13043478;
+
 /// Manages the FPS controllers. Executes in `PreUpdate`, after bevy's internal
 /// input processing is finished.
 ///
@@ -311,6 +313,7 @@ pub fn fps_controller_move(
                         let traction = Vec3::dot(toi_details.normal1, Vec3::Y);
                         let has_traction = traction > controller.traction_normal_cutoff;
 
+
                         // Only apply friction after at least one tick, allows b-hopping without losing speed
                         if controller.ground_tick >= 1 && has_traction {
                             let lateral_speed = velocity.linvel.xz().length();
@@ -323,10 +326,12 @@ pub fn fps_controller_move(
                             } else {
                                 velocity.linvel = Vec3::ZERO;
                             }
-                            if controller.ground_tick == 1 {
+                            /*if controller.ground_tick == 1 {
                                 velocity.linvel.y = -toi.toi;
-                            }
+                            }*/
                         }
+
+                        velocity.linvel.y = -toi.toi;
 
                         let mut add = acceleration(
                             wish_direction,
@@ -337,7 +342,7 @@ pub fn fps_controller_move(
                             controller.max_air_speed,
                         );
                         if !has_traction { 
-                            add.y -= controller.gravity * dt;
+                            add.y -= controller.gravity * dt; //* (controller.gravity * GRAVITY_MODIFIER);
                         }
                         velocity.linvel += add;
 
@@ -479,11 +484,13 @@ fn acceleration(wish_direction: Vec3, wish_speed: f32, acceleration: f32, veloci
         return Vec3::ZERO;
     }
 
+
     let acceleration_speed = f32::min(acceleration * wish_speed * dt, add_speed);
     let result = wish_direction * acceleration_speed;
     if result.length() > max_speed {
         return Vec3::ZERO;
     }
+
     result
 }
 
