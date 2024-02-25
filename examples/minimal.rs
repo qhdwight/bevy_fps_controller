@@ -1,10 +1,10 @@
 use std::f32::consts::TAU;
 
 use bevy::{
-    gltf::Gltf,
-    gltf::{GltfMesh, GltfNode},
+    gltf::{Gltf, GltfMesh, GltfNode},
     math::Vec3Swizzles,
     prelude::*,
+    render::camera::Exposure,
     window::CursorGrabMode,
 };
 use bevy_rapier3d::prelude::*;
@@ -17,7 +17,7 @@ fn main() {
     App::new()
         .insert_resource(AmbientLight {
             color: Color::WHITE,
-            brightness: 0.5,
+            brightness: 10000.0,
         })
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
@@ -40,7 +40,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
 
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
-            illuminance: 6000.0,
+            illuminance: light_consts::lux::FULL_DAYLIGHT,
             shadows_enabled: true,
             ..default()
         },
@@ -96,6 +96,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
                 fov: TAU / 5.0,
                 ..default()
             }),
+            exposure: Exposure::SUNLIGHT,
             ..default()
         },
         RenderPlayer { logical_entity },
@@ -115,12 +116,12 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
                 color: Color::BLACK,
             },
         )
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            top: Val::Px(5.0),
-            left: Val::Px(5.0),
-            ..default()
-        }),
+            .with_style(Style {
+                position_type: PositionType::Absolute,
+                top: Val::Px(5.0),
+                left: Val::Px(5.0),
+                ..default()
+            }),
     );
 }
 
