@@ -9,9 +9,15 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 description = "Bevy plugin that adds a Source engine inspired FPS movement controller"
 
+[features]
+default = ["xpbd"]
+rapier = ["dep:bevy_rapier3d"]
+xpbd = ["dep:bevy_xpbd_3d"]
+
 [dependencies]
 bevy = "0.13.0"
-bevy_rapier3d = "0.25.0"
+bevy_rapier3d = { version = "0.25.0", optional = true }
+bevy_xpbd_3d = { version = "0.4.2", optional = true }
 
 [[example]]
 name = "minimal"

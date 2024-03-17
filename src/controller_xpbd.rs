@@ -2,7 +2,7 @@ use std::f32::consts::*;
 
 use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
 
-use bevy_rapier3d::prelude::*;
+use bevy_xpbd_3d::prelude::*;
 
 /// Manages the FPS controllers. Executes in `PreUpdate`, after bevy's internal
 /// input processing is finished.
@@ -230,14 +230,13 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 
 pub fn fps_controller_move(
     time: Res<Time>,
-    physics_context: Res<RapierContext>,
     mut query: Query<(
         Entity,
         &FpsControllerInput,
         &mut FpsController,
         &mut Collider,
         &mut Transform,
-        &mut Velocity,
+        &mut LinearVelocity,
     )>,
 ) {
     let dt = time.delta_seconds();
@@ -256,9 +255,9 @@ pub fn fps_controller_move(
             MoveMode::Noclip => {
                 if input.movement == Vec3::ZERO {
                     let friction = controller.fly_friction.clamp(0.0, 1.0);
-                    velocity.linvel *= 1.0 - friction;
-                    if velocity.linvel.length_squared() < f32::EPSILON {
-                        velocity.linvel = Vec3::ZERO;
+                    *velocity = velocity * (1.0 - friction);
+                    if velocity.length_squared() < f32::EPSILON {
+                        *velocity = LinearVelocity::ZERO;
                     }
                 } else {
                     let fly_speed = if input.sprint {
@@ -270,7 +269,7 @@ pub fn fps_controller_move(
                         Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
-                    velocity.linvel = move_to_world * input.movement * fly_speed;
+                    *velocity = move_to_world * input.movement * fly_speed;
                 }
             }
             MoveMode::Ground => {
