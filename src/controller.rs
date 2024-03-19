@@ -34,7 +34,8 @@ impl Plugin for FpsControllerPlugin {
         app.add_systems(
             PreUpdate,
             (
-                fps_controller_input,
+                fps_controller_reset_input,
+                fps_controller_keyboard_mouse_input,
                 fps_controller_gamepad_input,
                 fps_controller_look,
                 fps_controller_move,
@@ -209,7 +210,13 @@ impl Default for FpsController {
 
 const ANGLE_EPSILON: f32 = 0.001953125;
 
-pub fn fps_controller_input(
+pub fn fps_controller_reset_input(mut query: Query<&mut FpsControllerInput>) {
+    for mut input in query.iter_mut() {
+        *input = default();
+    }
+}
+
+pub fn fps_controller_keyboard_mouse_input(
     key_input: Res<ButtonInput<KeyCode>>,
     mut mouse_events: EventReader<MouseMotion>,
     mut query: Query<(&FpsController, &mut FpsControllerInput)>,
@@ -232,15 +239,15 @@ pub fn fps_controller_input(
             input.yaw = input.yaw.rem_euclid(TAU);
         }
 
-        input.movement = Vec3::new(
+        input.movement += Vec3::new(
             to_axis(&key_input, controller.key_right, controller.key_left),
             to_axis(&key_input, controller.key_up, controller.key_down),
             to_axis(&key_input, controller.key_forward, controller.key_back),
         );
-        input.sprint = key_input.pressed(controller.key_sprint);
-        input.jump = key_input.pressed(controller.key_jump);
-        input.fly = key_input.just_pressed(controller.key_fly);
-        input.crouch = key_input.pressed(controller.key_crouch);
+        input.sprint = input.sprint || key_input.pressed(controller.key_sprint);
+        input.jump = input.jump || key_input.pressed(controller.key_jump);
+        input.fly = input.fly || key_input.just_pressed(controller.key_fly);
+        input.crouch = input.crouch || key_input.pressed(controller.key_crouch);
     }
 }
 
@@ -280,19 +287,19 @@ pub fn fps_controller_gamepad_input(
                 button(controller.pad_fly_up),
                 button(controller.pad_fly_down),
             );
-            input.movement = Vec3::new(move_vec.x, vertical_axis, move_vec.y);
-            input.sprint = button_input.pressed(button(controller.pad_sprint));
-            input.jump = button_input.pressed(button(controller.pad_jump));
-            input.fly = button_input.just_pressed(button(controller.pad_fly));
-            input.crouch = button_input.pressed(button(controller.pad_crouch));
+            input.movement += Vec3::new(move_vec.x, vertical_axis, move_vec.y);
+            input.sprint = input.sprint || button_input.pressed(button(controller.pad_sprint));
+            input.jump = input.jump || button_input.pressed(button(controller.pad_jump));
+            input.fly = input.fly || button_input.just_pressed(button(controller.pad_fly));
+            input.crouch = input.crouch || button_input.pressed(button(controller.pad_crouch));
         }
     }
 }
 
 pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerInput)>) {
     for (mut controller, input) in query.iter_mut() {
-        controller.pitch = input.pitch;
-        controller.yaw = input.yaw;
+        controller.pitch += input.pitch;
+        controller.yaw += input.yaw;
     }
 }
 
@@ -335,7 +342,7 @@ pub fn fps_controller_move(
                         controller.fly_speed
                     };
                     let mut move_to_world =
-                        Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
+                        Mat3::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
                     velocity.linvel = move_to_world * input.movement * fly_speed;
@@ -364,7 +371,7 @@ pub fn fps_controller_move(
                     );
 
                     let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
-                    let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
+                    let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, controller.yaw);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     let mut wish_direction = move_to_world * (input.movement * speeds);
                     let mut wish_speed = wish_direction.length();
