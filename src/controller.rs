@@ -182,7 +182,13 @@ impl Default for FpsController {
 // ███████╗╚██████╔╝╚██████╔╝██║╚██████╗
 // ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝ ╚═════╝
 
+// Used as padding by camera pitching (up/down) to avoid spooky math problems
 const ANGLE_EPSILON: f32 = 0.001953125;
+
+// If the distance to the ground is less than this value, the player is considered grounded
+const GROUNDED_DISTANCE: f32 = 0.125;
+
+const SLIGHT_SCALE_DOWN: f32 = 0.9375;
 
 pub fn fps_controller_input(
     key_input: Res<ButtonInput<KeyCode>>,
@@ -275,8 +281,11 @@ pub fn fps_controller_move(
                     transform.translation,
                     transform.rotation,
                     -Vec3::Y,
-                    &collider,
-                    ShapeCastOptions::with_max_time_of_impact(0.125),
+                    // Consider when the controller is right up against a wall
+                    // We do not want the shape cast to detect it,
+                    // so provide a slightly smaller collider in the XZ plane
+                    &scaled_collider_laterally(&collider, SLIGHT_SCALE_DOWN),
+                    ShapeCastOptions::with_max_time_of_impact(GROUNDED_DISTANCE),
                     filter,
                 );
 
@@ -396,7 +405,7 @@ pub fn fps_controller_move(
                         transform.rotation,
                         -Vec3::Y,
                         &collider,
-                        ShapeCastOptions::with_max_time_of_impact(controller.step_offset * 0.9375),
+                        ShapeCastOptions::with_max_time_of_impact(controller.step_offset * SLIGHT_SCALE_DOWN),
                         filter,
                     );
                     if let Some((hit, details)) = unwrap_hit_details(cast) {
@@ -457,6 +466,18 @@ fn collider_y_offset(collider: &Collider) -> Vec3 {
         capsule.half_height()
     } else {
         0.0
+    }
+}
+
+fn scaled_collider_laterally(collider: &Collider, scale: f32) -> Collider {
+    if let Some(cylinder) = collider.as_cylinder() {
+        let new_cylinder = Collider::cylinder(cylinder.half_height(), cylinder.radius() * scale);
+        new_cylinder
+    } else if let Some(capsule) = collider.as_capsule() {
+        let new_capsule = Collider::capsule(capsule.segment().a(), capsule.segment().b(), capsule.radius() * scale);
+        new_capsule
+    } else {
+        collider.clone()
     }
 }
 
