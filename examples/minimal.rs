@@ -56,6 +56,10 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     let logical_entity = commands
         .spawn((
             Collider::cylinder(height / 2.0, 0.5),
+            // A capsule can be used but is NOT recommended
+            // If you use it, you have to make sure each segment point is
+            // equidistant from the translation of the player transform
+            // Collider::capsule_y(height / 2.0, 0.5),
             Friction {
                 coefficient: 0.0,
                 combine_rule: CoefficientCombineRule::Min,
@@ -81,7 +85,6 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             },
             FpsController {
                 air_acceleration: 80.0,
-                step_offset: 0.25,
                 ..default()
             },
         ))

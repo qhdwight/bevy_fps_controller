@@ -158,7 +158,7 @@ impl Default for FpsController {
             ground_tick: 0,
             stop_speed: 1.0,
             jump_speed: 8.5,
-            step_offset: 0.0,
+            step_offset: 0.25,
             enable_input: true,
             key_forward: KeyCode::KeyW,
             key_back: KeyCode::KeyS,
@@ -387,10 +387,12 @@ pub fn fps_controller_move(
 
                 if let Some(mut capsule) = collider.as_capsule_mut() {
                     let radius = capsule.radius();
-                    capsule.set_segment(Vec3::Y * radius, Vec3::Y * (controller.height - radius));
-                }
-                if let Some(mut cylinder) = collider.as_cylinder_mut() {
+                    let half = Vec3::Y * (controller.height * 0.5 - radius);
+                    capsule.set_segment(-half, half);
+                } else if let Some(mut cylinder) = collider.as_cylinder_mut() {
                     cylinder.set_half_height(controller.height * 0.5);
+                } else {
+                    panic!("Controller must use a cylinder or capsule collider")
                 }
 
                 // Step offset really only works best for cylinders
@@ -417,7 +419,7 @@ pub fn fps_controller_move(
                 }
 
                 // Prevent falling off ledges
-                if controller.ground_tick >= 1 && input.crouch {
+                if controller.ground_tick >= 1 && input.crouch && !input.jump {
                     for _ in 0..2 {
                         // Find the component of our velocity that is overhanging and subtract it off
                         let overhang = overhang_component(
@@ -459,16 +461,20 @@ fn unwrap_hit_details(ground_cast: Option<(Entity, ShapeCastHit)>) -> Option<(Sh
     None
 }
 
+
+/// Returns the offset that puts a point at the center of the player transform to the bottom of the collider.
+/// Needed for when we want to originate something at the foot of the player.
 fn collider_y_offset(collider: &Collider) -> Vec3 {
     Vec3::Y * if let Some(cylinder) = collider.as_cylinder() {
         cylinder.half_height()
     } else if let Some(capsule) = collider.as_capsule() {
-        capsule.half_height()
+        capsule.half_height() + capsule.radius()
     } else {
-        0.0
+        panic!("Controller must use a cylinder or capsule collider")
     }
 }
 
+/// Return a collider that is scaled laterally (XZ plane) but not vertically (Y axis).
 fn scaled_collider_laterally(collider: &Collider, scale: f32) -> Collider {
     if let Some(cylinder) = collider.as_cylinder() {
         let new_cylinder = Collider::cylinder(cylinder.half_height(), cylinder.radius() * scale);
@@ -477,7 +483,7 @@ fn scaled_collider_laterally(collider: &Collider, scale: f32) -> Collider {
         let new_capsule = Collider::capsule(capsule.segment().a(), capsule.segment().b(), capsule.radius() * scale);
         new_capsule
     } else {
-        collider.clone()
+        panic!("Controller must use a cylinder or capsule collider")
     }
 }
 
@@ -492,7 +498,7 @@ fn overhang_component(
     // Cast a segment (zero radius capsule) from our next position back towards us (sweeping a rectangle)
     // If there is a ledge in front of us we will hit the edge of it
     // We can use the normal of the hit to subtract off the component that is overhanging
-    let cast_capsule = Collider::capsule(Vec3::Y * 0.125, -Vec3::Y * 0.125, 0.01);
+    let cast_capsule = Collider::capsule(Vec3::Y * 0.25, -Vec3::Y * 0.25, 0.01);
     let filter = QueryFilter::default().exclude_rigid_body(entity);
     let collider_offset = collider_y_offset(collider);
     let future_position = transform.translation - collider_offset + velocity * dt;
