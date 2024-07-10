@@ -11,7 +11,7 @@ use bevy_rapier3d::prelude::*;
 
 use bevy_fps_controller::controller::*;
 
-const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
+const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.625, 0.0);
 
 fn main() {
     App::new()
@@ -19,8 +19,7 @@ fn main() {
             color: Color::WHITE,
             brightness: 10000.0,
         })
-        .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
-        .insert_resource(RapierConfiguration::default())
+        .insert_resource(ClearColor(Color::linear_rgb(0.83, 0.96, 0.96)))
         .add_plugins(DefaultPlugins)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         // .add_plugins(RapierDebugRenderPlugin::default())
@@ -53,9 +52,14 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     // The other is a "render" player that is what is displayed to the user
     // This distinction is useful for later on if you want to add multiplayer,
     // where often time these two ideas are not exactly synced up
+    let height = 3.0;
     let logical_entity = commands
         .spawn((
-            Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
+            Collider::cylinder(height / 2.0, 0.5),
+            // A capsule can be used but is NOT recommended
+            // If you use it, you have to make sure each segment point is
+            // equidistant from the translation of the player transform
+            // Collider::capsule_y(height / 2.0, 0.5),
             Friction {
                 coefficient: 0.0,
                 combine_rule: CoefficientCombineRule::Min,
@@ -85,8 +89,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             },
         ))
         .insert(CameraConfig {
-            height_offset: 0.0,
-            radius_scale: 0.75,
+            height_offset: -0.5,
         })
         .id();
 
@@ -183,19 +186,20 @@ fn manage_cursor(
     mut window_query: Query<&mut Window>,
     mut controller_query: Query<&mut FpsController>,
 ) {
-    let mut window = window_query.single_mut();
-    if btn.just_pressed(MouseButton::Left) {
-        window.cursor.grab_mode = CursorGrabMode::Locked;
-        window.cursor.visible = false;
-        for mut controller in &mut controller_query {
-            controller.enable_input = true;
+    for mut window in &mut window_query {
+        if btn.just_pressed(MouseButton::Left) {
+            window.cursor.grab_mode = CursorGrabMode::Locked;
+            window.cursor.visible = false;
+            for mut controller in &mut controller_query {
+                controller.enable_input = true;
+            }
         }
-    }
-    if key.just_pressed(KeyCode::Escape) {
-        window.cursor.grab_mode = CursorGrabMode::None;
-        window.cursor.visible = true;
-        for mut controller in &mut controller_query {
-            controller.enable_input = false;
+        if key.just_pressed(KeyCode::Escape) {
+            window.cursor.grab_mode = CursorGrabMode::None;
+            window.cursor.visible = true;
+            for mut controller in &mut controller_query {
+                controller.enable_input = false;
+            }
         }
     }
 }
