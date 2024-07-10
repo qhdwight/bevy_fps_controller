@@ -42,7 +42,7 @@ fn setup(mut commands: Commands, ...) {
     ...
     let logical_entity = commands
         .spawn((
-            Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
+            Collider::capsule_y(1.0, 0.5),
             Friction {
                 coefficient: 0.0,
                 combine_rule: CoefficientCombineRule::Min,
@@ -69,8 +69,7 @@ fn setup(mut commands: Commands, ...) {
             FpsController { ..default() }
         ))
         .insert(CameraConfig {
-            height_offset: 0.0,
-            radius_scale: 0.75,
+            height_offset: -0.5,
         })
         .id();
 
