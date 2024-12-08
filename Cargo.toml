@@ -10,8 +10,8 @@ readme = "README.md"
 description = "Bevy plugin that adds a Source engine inspired FPS movement controller"
 
 [dependencies]
-bevy = "0.14"
-bevy_rapier3d = "0.27"
+bevy = { version = "0.15.0", features = ["dynamic_linking"] }
+bevy_rapier3d = { git = "https://github.com/Vrixyz/bevy_rapier.git", branch = "master-bevy_0.15" }
 
 [[example]]
 name = "minimal"

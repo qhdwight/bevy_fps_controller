@@ -47,6 +47,14 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
         ..default()
     });
 
+    commands.spawn((
+        DirectionalLight {
+            color: Color::WHITE,
+            ..default()
+        },
+        Transform::from_xyz(4.0, 7.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
     // Note that we have two entities for the player
     // One is a "logical" player that handles the physics computation and collision
     // The other is a "render" player that is what is displayed to the user
@@ -76,7 +84,9 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             AdditionalMassProperties::Mass(1.0),
             GravityScale(0.0),
             Ccd { enabled: true }, // Prevent clipping when going fast
-            TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
+            //            TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
+            Transform::from_translation(SPAWN_POINT),
+            GlobalTransform::default(),
             LogicalPlayer,
             FpsControllerInput {
                 pitch: -TAU / 12.0,
@@ -119,12 +129,12 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
                 color: Color::BLACK,
             },
         )
-            .with_style(Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(5.0),
-                left: Val::Px(5.0),
-                ..default()
-            }),
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            top: Val::Px(5.0),
+            left: Val::Px(5.0),
+            ..default()
+        }),
     );
 }
 
@@ -188,15 +198,15 @@ fn manage_cursor(
 ) {
     for mut window in &mut window_query {
         if btn.just_pressed(MouseButton::Left) {
-            window.cursor.grab_mode = CursorGrabMode::Locked;
-            window.cursor.visible = false;
+            window.cursor_options.grab_mode = CursorGrabMode::Locked;
+            window.cursor_options.visible = false;
             for mut controller in &mut controller_query {
                 controller.enable_input = true;
             }
         }
         if key.just_pressed(KeyCode::Escape) {
-            window.cursor.grab_mode = CursorGrabMode::None;
-            window.cursor.visible = true;
+            window.cursor_options.grab_mode = CursorGrabMode::None;
+            window.cursor_options.visible = true;
             for mut controller in &mut controller_query {
                 controller.enable_input = false;
             }
