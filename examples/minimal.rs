@@ -93,6 +93,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
         .id();
 
     commands.spawn((
+        Camera3d::default(),
         Projection::Perspective(PerspectiveProjection {
             fov: TAU / 5.0,
             ..default()
