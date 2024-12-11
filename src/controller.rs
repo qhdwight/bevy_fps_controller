@@ -229,7 +229,7 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 
 pub fn fps_controller_move(
     time: Res<Time>,
-    physics_context: &RapierContext,
+    physics_context: ReadDefaultRapierContext,
     mut query: Query<(
         Entity,
         &FpsControllerInput,
@@ -424,7 +424,7 @@ pub fn fps_controller_move(
                             entity,
                             &collider,
                             transform.as_ref(),
-                            physics_context,
+                            &physics_context,
                             velocity.linvel,
                             dt,
                         );
@@ -437,7 +437,7 @@ pub fn fps_controller_move(
                         entity,
                         &collider,
                         transform.as_ref(),
-                        physics_context,
+                        &physics_context,
                         velocity.linvel,
                         dt,
                     ).is_some()
@@ -489,7 +489,7 @@ fn overhang_component(
     entity: Entity,
     collider: &Collider,
     transform: &Transform,
-    physics_context: &RapierContext,
+    physics_context: &ReadDefaultRapierContext,
     velocity: Vec3,
     dt: f32,
 ) -> Option<Vec3> {
