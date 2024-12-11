@@ -37,15 +37,14 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     window.title = String::from("Minimal FPS Controller Example");
     // commands.spawn(Window { title: "Minimal FPS Controller Example".to_string(), ..default() });
 
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn((
+        DirectionalLight {
             illuminance: light_consts::lux::FULL_DAYLIGHT,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 7.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+        Transform::from_xyz(4.0, 7.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
 
     // Note that we have two entities for the player
     // One is a "logical" player that handles the physics computation and collision
@@ -76,7 +75,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             AdditionalMassProperties::Mass(1.0),
             GravityScale(0.0),
             Ccd { enabled: true }, // Prevent clipping when going fast
-            TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
+            Transform::from_translation(SPAWN_POINT),
             LogicalPlayer,
             FpsControllerInput {
                 pitch: -TAU / 12.0,
@@ -94,14 +93,11 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
         .id();
 
     commands.spawn((
-        Camera3dBundle {
-            projection: Projection::Perspective(PerspectiveProjection {
-                fov: TAU / 5.0,
-                ..default()
-            }),
-            exposure: Exposure::SUNLIGHT,
+        Projection::Perspective(PerspectiveProjection {
+            fov: TAU / 5.0,
             ..default()
-        },
+        }),
+        Exposure::SUNLIGHT,
         RenderPlayer { logical_entity },
     ));
 
@@ -110,22 +106,31 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
         is_loaded: false,
     });
 
-    commands.spawn(
-        TextBundle::from_section(
-            "",
-            TextStyle {
-                font: assets.load("fira_mono.ttf"),
-                font_size: 24.0,
-                color: Color::BLACK,
-            },
-        )
-            .with_style(Style {
-                position_type: PositionType::Absolute,
-                top: Val::Px(5.0),
-                left: Val::Px(5.0),
-                ..default()
-            }),
-    );
+    commands.spawn((
+        Text2d(String::from("")),
+        TextFont {
+            font: assets.load("fira_mono.ttf"),
+            font_size: 24.0,
+            ..default()
+        },
+        TextColor(Color::BLACK),
+        TextLayout::new(JustifyText::Left, LineBreak::NoWrap)
+        //
+        // TextBundle::from_section(
+        //     "",
+        //     TextStyle {
+        //         font: assets.load("fira_mono.ttf"),
+        //         font_size: 24.0,
+        //         color: Color::BLACK,
+        //     },
+        // )
+        // .with_style(Style {
+        //     position_type: PositionType::Absolute,
+        //     top: Val::Px(5.0),
+        //     left: Val::Px(5.0),
+        //     ..default()
+        // }),
+    ));
 }
 
 fn respawn(mut query: Query<(&mut Transform, &mut Velocity)>) {
@@ -161,7 +166,7 @@ fn scene_colliders(
 
     if let Some(gltf) = gltf {
         let scene = gltf.scenes.first().unwrap().clone();
-        commands.spawn(SceneBundle { scene, ..default() });
+        commands.spawn(SceneRoot(scene));
         for node in &gltf.nodes {
             let node = gltf_node_assets.get(node).unwrap();
             if let Some(gltf_mesh) = node.mesh.clone() {
@@ -169,9 +174,9 @@ fn scene_colliders(
                 for mesh_primitive in &gltf_mesh.primitives {
                     let mesh = mesh_assets.get(&mesh_primitive.mesh).unwrap();
                     commands.spawn((
-                        Collider::from_bevy_mesh(mesh, &ComputedColliderShape::TriMesh).unwrap(),
+                        Collider::from_bevy_mesh(mesh, &ComputedColliderShape::TriMesh(TriMeshFlags::all())).unwrap(),
                         RigidBody::Fixed,
-                        TransformBundle::from_transform(node.transform),
+                        node.transform,
                     ));
                 }
             }
@@ -188,15 +193,15 @@ fn manage_cursor(
 ) {
     for mut window in &mut window_query {
         if btn.just_pressed(MouseButton::Left) {
-            window.cursor.grab_mode = CursorGrabMode::Locked;
-            window.cursor.visible = false;
+            window.cursor_options.grab_mode = CursorGrabMode::Locked;
+            window.cursor_options.visible = false;
             for mut controller in &mut controller_query {
                 controller.enable_input = true;
             }
         }
         if key.just_pressed(KeyCode::Escape) {
-            window.cursor.grab_mode = CursorGrabMode::None;
-            window.cursor.visible = true;
+            window.cursor_options.grab_mode = CursorGrabMode::None;
+            window.cursor_options.visible = true;
             for mut controller in &mut controller_query {
                 controller.enable_input = false;
             }
@@ -206,11 +211,11 @@ fn manage_cursor(
 
 fn display_text(
     mut controller_query: Query<(&Transform, &Velocity)>,
-    mut text_query: Query<&mut Text>,
+    mut text_query: Query<&mut Text2d>,
 ) {
     for (transform, velocity) in &mut controller_query {
         for mut text in &mut text_query {
-            text.sections[0].value = format!(
+            text.0 = format!(
                 "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}\nspd: {:.2}",
                 velocity.linvel.x,
                 velocity.linvel.y,
