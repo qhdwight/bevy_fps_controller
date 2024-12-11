@@ -54,7 +54,7 @@ fn setup(mut commands: Commands, ...) {
             ActiveEvents::COLLISION_EVENTS,
             Velocity::zero(),
             RigidBody::Dynamic,
-            Sleeping::disa  bled(),
+            Sleeping::disabled(),
             LockedAxes::ROTATION_LOCKED,
             AdditionalMassProperties::Mass(1.0),
             GravityScale(0.0),
