@@ -108,29 +108,19 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     });
 
     commands.spawn((
-        Text2d(String::from("")),
+        Text(String::from("")),
         TextFont {
             font: assets.load("fira_mono.ttf"),
             font_size: 24.0,
             ..default()
         },
         TextColor(Color::BLACK),
-        TextLayout::new(JustifyText::Left, LineBreak::NoWrap)
-        //
-        // TextBundle::from_section(
-        //     "",
-        //     TextStyle {
-        //         font: assets.load("fira_mono.ttf"),
-        //         font_size: 24.0,
-        //         color: Color::BLACK,
-        //     },
-        // )
-        // .with_style(Style {
-        //     position_type: PositionType::Absolute,
-        //     top: Val::Px(5.0),
-        //     left: Val::Px(5.0),
-        //     ..default()
-        // }),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(5.0),
+            left: Val::Px(5.0),
+            ..default()
+        }
     ));
 }
 
@@ -175,7 +165,11 @@ fn scene_colliders(
                 for mesh_primitive in &gltf_mesh.primitives {
                     let mesh = mesh_assets.get(&mesh_primitive.mesh).unwrap();
                     commands.spawn((
-                        Collider::from_bevy_mesh(mesh, &ComputedColliderShape::TriMesh(TriMeshFlags::all())).unwrap(),
+                        Collider::from_bevy_mesh(
+                            mesh,
+                            &ComputedColliderShape::TriMesh(TriMeshFlags::all()),
+                        )
+                        .unwrap(),
                         RigidBody::Fixed,
                         node.transform,
                     ));
@@ -212,7 +206,7 @@ fn manage_cursor(
 
 fn display_text(
     mut controller_query: Query<(&Transform, &Velocity)>,
-    mut text_query: Query<&mut Text2d>,
+    mut text_query: Query<&mut Text>,
 ) {
     for (transform, velocity) in &mut controller_query {
         for mut text in &mut text_query {
