@@ -41,10 +41,8 @@ impl Plugin for FpsControllerPlugin {
                 .chain()
                 .after(mouse::mouse_button_input_system)
                 .after(keyboard::keyboard_input_system)
-                .after(gamepad::gamepad_axis_event_system)
-                .after(gamepad::gamepad_button_event_system)
+                .after(gamepad::gamepad_event_processing_system)
                 .after(gamepad::gamepad_connection_system)
-                .after(gamepad::gamepad_event_system)
                 .after(touch::touch_screen_input_system),
         );
     }
@@ -231,7 +229,7 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 
 pub fn fps_controller_move(
     time: Res<Time>,
-    physics_context: Res<RapierContext>,
+    physics_context: ReadDefaultRapierContext,
     mut query: Query<(
         Entity,
         &FpsControllerInput,
@@ -241,7 +239,7 @@ pub fn fps_controller_move(
         &mut Velocity,
     )>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
         query.iter_mut()
@@ -426,7 +424,7 @@ pub fn fps_controller_move(
                             entity,
                             &collider,
                             transform.as_ref(),
-                            physics_context.as_ref(),
+                            &physics_context,
                             velocity.linvel,
                             dt,
                         );
@@ -439,7 +437,7 @@ pub fn fps_controller_move(
                         entity,
                         &collider,
                         transform.as_ref(),
-                        physics_context.as_ref(),
+                        &physics_context,
                         velocity.linvel,
                         dt,
                     ).is_some()
@@ -491,7 +489,7 @@ fn overhang_component(
     entity: Entity,
     collider: &Collider,
     transform: &Transform,
-    physics_context: &RapierContext,
+    physics_context: &ReadDefaultRapierContext,
     velocity: Vec3,
     dt: f32,
 ) -> Option<Vec3> {
