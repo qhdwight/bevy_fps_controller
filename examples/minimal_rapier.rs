@@ -120,7 +120,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             top: Val::Px(5.0),
             left: Val::Px(5.0),
             ..default()
-        }
+        },
     ));
 }
 
