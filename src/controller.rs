@@ -1,6 +1,7 @@
 use std::f32::consts::*;
+use std::hash::Hash;
 
-use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
+use bevy::{input::mouse::MouseMotion, prelude::*};
 use bevy_rapier3d::prelude::*;
 
 /// Manages the FPS controllers. Executes in `PreUpdate`, after bevy's internal
@@ -33,7 +34,9 @@ impl Plugin for FpsControllerPlugin {
         app.add_systems(
             PreUpdate,
             (
-                fps_controller_input,
+                fps_controller_reset_input,
+                fps_controller_keyboard_mouse_input,
+                fps_controller_gamepad_input,
                 fps_controller_look,
                 fps_controller_move,
                 fps_controller_render,
@@ -112,7 +115,7 @@ pub struct FpsController {
     pub yaw: f32,
     pub ground_tick: u8,
     pub stop_speed: f32,
-    pub sensitivity: f32,
+    pub mouse_sensitivity: f32,
     pub enable_input: bool,
     pub step_offset: f32,
     pub key_forward: KeyCode,
@@ -125,6 +128,17 @@ pub struct FpsController {
     pub key_jump: KeyCode,
     pub key_fly: KeyCode,
     pub key_crouch: KeyCode,
+    pub pad_move_x: GamepadAxis,
+    pub pad_move_y: GamepadAxis,
+    pub pad_look_x: GamepadAxis,
+    pub pad_look_y: GamepadAxis,
+    pub pad_fly_up: GamepadButton,
+    pub pad_fly_down: GamepadButton,
+    pub pad_jump: GamepadButton,
+    pub pad_sprint: GamepadButton,
+    pub pad_fly: GamepadButton,
+    pub pad_crouch: GamepadButton,
+    pub pad_sensitivity: f32,
 }
 
 impl Default for FpsController {
@@ -171,7 +185,18 @@ impl Default for FpsController {
             key_jump: KeyCode::Space,
             key_fly: KeyCode::KeyF,
             key_crouch: KeyCode::ControlLeft,
-            sensitivity: 0.001,
+            mouse_sensitivity: 0.001,
+            pad_move_x: GamepadAxis::LeftStickX,
+            pad_move_y: GamepadAxis::LeftStickY,
+            pad_look_x: GamepadAxis::RightStickX,
+            pad_look_y: GamepadAxis::RightStickY,
+            pad_fly_up: GamepadButton::DPadUp,
+            pad_fly_down: GamepadButton::DPadDown,
+            pad_jump: GamepadButton::South,
+            pad_sprint: GamepadButton::LeftThumb,
+            pad_fly: GamepadButton::RightThumb,
+            pad_crouch: GamepadButton::East,
+            pad_sensitivity: 0.025,
         }
     }
 }
@@ -188,7 +213,13 @@ const ANGLE_EPSILON: f32 = 0.001953125;
 
 const SLIGHT_SCALE_DOWN: f32 = 0.9375;
 
-pub fn fps_controller_input(
+pub fn fps_controller_reset_input(mut query: Query<&mut FpsControllerInput>) {
+    for mut input in query.iter_mut() {
+        *input = default();
+    }
+}
+
+pub fn fps_controller_keyboard_mouse_input(
     key_input: Res<ButtonInput<KeyCode>>,
     mut mouse_events: EventReader<MouseMotion>,
     mut query: Query<(&FpsController, &mut FpsControllerInput)>,
@@ -201,7 +232,7 @@ pub fn fps_controller_input(
         for mouse_event in mouse_events.read() {
             mouse_delta += mouse_event.delta;
         }
-        mouse_delta *= controller.sensitivity;
+        mouse_delta *= controller.mouse_sensitivity;
 
         input.pitch = (input.pitch - mouse_delta.y)
             .clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
@@ -210,22 +241,57 @@ pub fn fps_controller_input(
             input.yaw = input.yaw.rem_euclid(TAU);
         }
 
-        input.movement = Vec3::new(
-            get_axis(&key_input, controller.key_right, controller.key_left),
-            get_axis(&key_input, controller.key_up, controller.key_down),
-            get_axis(&key_input, controller.key_forward, controller.key_back),
+        input.movement += Vec3::new(
+            to_axis(&key_input, controller.key_right, controller.key_left),
+            to_axis(&key_input, controller.key_up, controller.key_down),
+            to_axis(&key_input, controller.key_forward, controller.key_back),
         );
-        input.sprint = key_input.pressed(controller.key_sprint);
-        input.jump = key_input.pressed(controller.key_jump);
-        input.fly = key_input.just_pressed(controller.key_fly);
-        input.crouch = key_input.pressed(controller.key_crouch);
+        input.sprint = input.sprint || key_input.pressed(controller.key_sprint);
+        input.jump = input.jump || key_input.pressed(controller.key_jump);
+        input.fly = input.fly || key_input.just_pressed(controller.key_fly);
+        input.crouch = input.crouch || key_input.pressed(controller.key_crouch);
+    }
+}
+
+pub fn fps_controller_gamepad_input(
+    gamepads: Query<&Gamepad>,
+    mut query: Query<(&FpsController, &mut FpsControllerInput)>,
+) {
+    for gamepad in gamepads.iter() {
+        
+        for (controller, mut input) in query.iter_mut() {
+            if !controller.enable_input {
+                continue;
+            }
+            
+            // Helper function to get axis values
+            let axis = |axis_type| gamepad.get(axis_type).unwrap();
+            let move_vec = Vec2::new(axis(controller.pad_move_x), axis(controller.pad_move_y));
+            let look_vec = Vec2::new(axis(controller.pad_look_x), axis(controller.pad_look_y))
+                * controller.pad_sensitivity;
+
+            input.pitch = (input.pitch + look_vec.y)
+                .clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
+            input.yaw -= look_vec.x;
+            if input.yaw.abs() > PI {
+                input.yaw = input.yaw.rem_euclid(TAU);
+            }
+
+            let vertical_axis = to_axis(gamepad.digital(), controller.pad_fly_up, controller.pad_fly_down);
+
+            input.movement += Vec3::new(move_vec.x, vertical_axis, move_vec.y);
+            input.sprint = input.sprint || gamepad.pressed(controller.pad_sprint);
+            input.jump = input.jump || gamepad.pressed(controller.pad_jump);
+            input.fly = input.fly || gamepad.just_pressed(controller.pad_fly);
+            input.crouch = input.crouch || gamepad.pressed(controller.pad_crouch);
+        }
     }
 }
 
 pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerInput)>) {
     for (mut controller, input) in query.iter_mut() {
-        controller.pitch = input.pitch;
-        controller.yaw = input.yaw;
+        controller.pitch += input.pitch;
+        controller.yaw += input.yaw;
     }
 }
 
@@ -267,8 +333,7 @@ pub fn fps_controller_move(
                     } else {
                         controller.fly_speed
                     };
-                    let mut move_to_world =
-                        Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
+                    let mut move_to_world = Mat3::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
                     velocity.linvel = move_to_world * input.movement * fly_speed;
@@ -291,7 +356,7 @@ pub fn fps_controller_move(
                 );
 
                 let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
-                let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
+                let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, controller.yaw);
                 move_to_world.z_axis *= -1.0; // Forward is -Z
                 let mut wish_direction = move_to_world * (input.movement * speeds);
                 let mut wish_speed = wish_direction.length();
@@ -561,16 +626,9 @@ fn acceleration(
     wish_direction * acceleration_speed
 }
 
-fn get_pressed(key_input: &Res<ButtonInput<KeyCode>>, key: KeyCode) -> f32 {
-    if key_input.pressed(key) {
-        1.0
-    } else {
-        0.0
-    }
-}
-
-fn get_axis(key_input: &Res<ButtonInput<KeyCode>>, key_pos: KeyCode, key_neg: KeyCode) -> f32 {
-    get_pressed(key_input, key_pos) - get_pressed(key_input, key_neg)
+/// Converts two button inputs into an f32 with a range of [-1, 1]
+fn to_axis<T: Copy + Eq + Send + Sync + Hash>(input: &ButtonInput<T>, pos: T, neg: T) -> f32 {
+    input.pressed(pos) as u8 as f32 - input.pressed(neg) as u8 as f32
 }
 
 // ██████╗ ███████╗███╗   ██╗██████╗ ███████╗██████╗
