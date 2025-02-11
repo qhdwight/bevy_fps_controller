@@ -1,6 +1,9 @@
 use std::f32::consts::*;
 
-use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
+use bevy::{input::{
+  gamepad::GamepadEvent,
+  mouse::MouseMotion,},
+  math::Vec3Swizzles, prelude::*};
 use bevy_rapier3d::prelude::*;
 
 /// Manages the FPS controllers. Executes in `PreUpdate`, after bevy's internal
@@ -33,7 +36,7 @@ impl Plugin for FpsControllerPlugin {
         app.add_systems(
             PreUpdate,
             (
-                fps_controller_input,
+                fps_controller_gamepad_input,
                 fps_controller_look,
                 fps_controller_move,
                 fps_controller_render,
@@ -41,8 +44,10 @@ impl Plugin for FpsControllerPlugin {
                 .chain()
                 .after(mouse::mouse_button_input_system)
                 .after(keyboard::keyboard_input_system)
-                .after(gamepad::gamepad_event_processing_system)
+                .after(gamepad::gamepad_axis_event_system)
+                .after(gamepad::gamepad_button_event_system)
                 .after(gamepad::gamepad_connection_system)
+                .after(gamepad::gamepad_event_system)
                 .after(touch::touch_screen_input_system),
         );
     }
@@ -75,6 +80,8 @@ pub struct FpsControllerInput {
     pub crouch: bool,
     pub pitch: f32,
     pub yaw: f32,
+    pub pitch_delta: f32,
+    pub yaw_delta: f32,
     pub movement: Vec3,
 }
 
@@ -111,6 +118,8 @@ pub struct FpsController {
     pub ground_tick: u8,
     pub stop_speed: f32,
     pub sensitivity: f32,
+    pub gamepad_vertical_look_sensitivity: f32,
+    pub gamepad_horizontal_look_sensitivity: f32,
     pub enable_input: bool,
     pub step_offset: f32,
     pub key_forward: KeyCode,
@@ -169,6 +178,8 @@ impl Default for FpsController {
             key_fly: KeyCode::KeyF,
             key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
+            gamepad_vertical_look_sensitivity: 1.2,
+            gamepad_horizontal_look_sensitivity: 2.2,
         }
     }
 }
@@ -220,8 +231,45 @@ pub fn fps_controller_input(
     }
 }
 
-pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerInput)>) {
-    for (mut controller, input) in query.iter_mut() {
+pub fn fps_controller_gamepad_input(
+    mut evr_gamepad: EventReader<GamepadEvent>,
+    mut query: Query<(&FpsController, &mut FpsControllerInput)>,
+) {
+    for (controller, mut input) in query.iter_mut()
+        .filter(|(controller, _)| controller.enable_input) {
+
+    for ev in evr_gamepad.read() {
+      match ev {
+        GamepadEvent::Axis (axis) =>
+          match axis.axis_type {
+            GamepadAxisType::RightStickY => input.pitch_delta = axis.value * controller.gamepad_vertical_look_sensitivity,
+            GamepadAxisType::RightStickX => input.yaw_delta = -axis.value * controller.gamepad_horizontal_look_sensitivity,
+            GamepadAxisType::LeftStickX => input.movement.x = axis.value,
+            GamepadAxisType::LeftStickY => input.movement.z = axis.value,
+            _=>{
+              println!("Axis {:?} on gamepad {:?} is now at {:?}",
+              axis.axis_type, axis.gamepad, axis.value);}},
+        GamepadEvent::Button (button) =>
+          match button.button_type {
+            GamepadButtonType::West => input.sprint = button.value != 0.,
+            GamepadButtonType::North => input.jump = button.value != 0.,
+            GamepadButtonType::South => input.crouch = button.value != 0.,
+            _=>{
+              println!("button {:?} on gamepad {:?} is now at {:?}",
+              button.button_type, button.gamepad, button.value);}},
+        _=>{}
+        }}}}
+
+pub fn fps_controller_look(
+  time: Res<Time>,
+  mut query: Query<(&mut FpsController, &mut FpsControllerInput)>
+  ) {
+    let dt = time.delta_seconds();
+    for (mut controller, mut input) in query.iter_mut() {
+        input.pitch = (input.pitch + input.pitch_delta * dt)
+            .clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
+        input.yaw += input.yaw_delta * dt;
+        if input.yaw.abs() > PI { input.yaw = input.yaw.rem_euclid(TAU); }
         controller.pitch = input.pitch;
         controller.yaw = input.yaw;
     }
@@ -229,7 +277,7 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 
 pub fn fps_controller_move(
     time: Res<Time>,
-    physics_context: ReadDefaultRapierContext,
+    physics_context: Res<RapierContext>,
     mut query: Query<(
         Entity,
         &FpsControllerInput,
@@ -239,7 +287,7 @@ pub fn fps_controller_move(
         &mut Velocity,
     )>,
 ) {
-    let dt = time.delta_secs();
+    let dt = time.delta_seconds();
 
     for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
         query.iter_mut()
@@ -424,7 +472,7 @@ pub fn fps_controller_move(
                             entity,
                             &collider,
                             transform.as_ref(),
-                            &physics_context,
+                            physics_context.as_ref(),
                             velocity.linvel,
                             dt,
                         );
@@ -437,7 +485,7 @@ pub fn fps_controller_move(
                         entity,
                         &collider,
                         transform.as_ref(),
-                        &physics_context,
+                        physics_context.as_ref(),
                         velocity.linvel,
                         dt,
                     ).is_some()
@@ -489,7 +537,7 @@ fn overhang_component(
     entity: Entity,
     collider: &Collider,
     transform: &Transform,
-    physics_context: &ReadDefaultRapierContext,
+    physics_context: &RapierContext,
     velocity: Vec3,
     dt: f32,
 ) -> Option<Vec3> {
