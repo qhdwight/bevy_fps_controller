@@ -84,6 +84,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             },
             FpsController {
                 air_acceleration: 80.0,
+                mouse_invert_y: false, // Set to true to invert the mouse
                 ..default()
             },
         ))

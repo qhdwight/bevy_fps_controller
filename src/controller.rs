@@ -111,6 +111,8 @@ pub struct FpsController {
     pub ground_tick: u8,
     pub stop_speed: f32,
     pub sensitivity: f32,
+    pub mouse_invert_y : bool,
+    pub mouse_invert_x : bool,
     pub enable_input: bool,
     pub step_offset: f32,
     pub key_forward: KeyCode,
@@ -169,6 +171,8 @@ impl Default for FpsController {
             key_fly: KeyCode::KeyF,
             key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
+            mouse_invert_x: false,
+            mouse_invert_y: false,
         }
     }
 }
@@ -200,6 +204,10 @@ pub fn fps_controller_input(
             mouse_delta += mouse_event.delta;
         }
         mouse_delta *= controller.sensitivity;
+
+        // apply mouse inversion if enabled
+        mouse_delta.x = controller.mouse_invert_x.then(|| -mouse_delta.x).unwrap_or(mouse_delta.x);
+        mouse_delta.y = controller.mouse_invert_y.then(|| -mouse_delta.y).unwrap_or(mouse_delta.y);
 
         input.pitch = (input.pitch - mouse_delta.y)
             .clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
