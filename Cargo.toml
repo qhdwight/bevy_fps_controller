@@ -11,7 +11,7 @@ description = "Bevy plugin that adds a Source engine inspired FPS movement contr
 
 [dependencies]
 bevy = "0.15"
-bevy_rapier3d = "0.28"
+bevy_rapier3d = "0.29"
 
 [[example]]
 name = "minimal"
