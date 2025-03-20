@@ -83,6 +83,8 @@ pub struct FpsController {
     pub move_mode: MoveMode,
     pub radius: f32,
     pub gravity: f32,
+    // If the distance to the ground is less than this value, the player is considered grounded
+    pub grounded_distance: f32,
     pub walk_speed: f32,
     pub run_speed: f32,
     pub forward_speed: f32,
@@ -129,6 +131,7 @@ impl Default for FpsController {
     fn default() -> Self {
         Self {
             move_mode: MoveMode::Ground,
+            grounded_distance: 0.125,
             radius: 0.5,
             fly_speed: 10.0,
             fast_fly_speed: 30.0,
@@ -182,9 +185,6 @@ impl Default for FpsController {
 
 // Used as padding by camera pitching (up/down) to avoid spooky math problems
 const ANGLE_EPSILON: f32 = 0.001953125;
-
-// If the distance to the ground is less than this value, the player is considered grounded
-const GROUNDED_DISTANCE: f32 = 0.125;
 
 const SLIGHT_SCALE_DOWN: f32 = 0.9375;
 
@@ -286,7 +286,7 @@ pub fn fps_controller_move(
                     // We do not want the shape cast to detect it,
                     // so provide a slightly smaller collider in the XZ plane
                     &scaled_collider_laterally(&collider, SLIGHT_SCALE_DOWN),
-                    ShapeCastOptions::with_max_time_of_impact(GROUNDED_DISTANCE),
+                    ShapeCastOptions::with_max_time_of_impact(controller.grounded_distance),
                     filter,
                 );
 
