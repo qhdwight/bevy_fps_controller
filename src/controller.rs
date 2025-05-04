@@ -278,7 +278,7 @@ pub fn fps_controller_move(
                 // Shape cast downwards to find ground
                 // Better than a ray cast as it handles when you are near the edge of a surface
                 let filter = QueryFilter::default().exclude_rigid_body(entity);
-                let ground_cast = physics_context.single().cast_shape(
+                let ground_cast = physics_context.single().unwrap().cast_shape(
                     transform.translation,
                     transform.rotation,
                     -Vec3::Y,
@@ -408,7 +408,7 @@ pub fn fps_controller_move(
                     // If we can find a surface below us, we can adjust our position to be on top of it
                     let future_position = transform.translation + velocity.linvel * dt;
                     let future_position_lifted = future_position + Vec3::Y * controller.step_offset;
-                    let cast = physics_context.single().cast_shape(
+                    let cast = physics_context.single().unwrap().cast_shape(
                         future_position_lifted,
                         transform.rotation,
                         -Vec3::Y,
@@ -518,7 +518,7 @@ fn overhang_component(
     let filter = QueryFilter::default().exclude_rigid_body(entity);
     let collider_offset = collider_y_offset(collider);
     let future_position = transform.translation - collider_offset + velocity * dt;
-    let cast = physics_context.single().cast_shape(
+    let cast = physics_context.single().unwrap().cast_shape(
         future_position,
         transform.rotation,
         -velocity,
@@ -527,7 +527,7 @@ fn overhang_component(
         filter,
     );
     if let Some((_, hit_details)) = unwrap_hit_details(cast) {
-        let cast = physics_context.single().cast_ray(
+        let cast = physics_context.single().unwrap().cast_ray(
             future_position + Vec3::Y * 0.125,
             -Vec3::Y,
             0.375,
