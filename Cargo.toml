@@ -11,7 +11,7 @@ description = "Bevy plugin that adds a Source engine inspired FPS movement contr
 
 [dependencies]
 bevy = "0.16"
-bevy_rapier3d = { git = "https://github.com/mnmaita/bevy_rapier.git", branch = "mnmaita/bevy-0.16" }
+bevy_rapier3d = "0.30"
 
 [[example]]
 name = "minimal"
