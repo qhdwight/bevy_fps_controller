@@ -83,6 +83,8 @@ pub struct FpsController {
     pub move_mode: MoveMode,
     pub radius: f32,
     pub gravity: f32,
+    // If the distance to the ground is less than this value, the player is considered grounded
+    pub grounded_distance: f32,
     pub walk_speed: f32,
     pub run_speed: f32,
     pub forward_speed: f32,
@@ -129,6 +131,7 @@ impl Default for FpsController {
     fn default() -> Self {
         Self {
             move_mode: MoveMode::Ground,
+            grounded_distance: 0.125,
             radius: 0.5,
             fly_speed: 10.0,
             fast_fly_speed: 30.0,
@@ -183,9 +186,6 @@ impl Default for FpsController {
 // Used as padding by camera pitching (up/down) to avoid spooky math problems
 const ANGLE_EPSILON: f32 = 0.001953125;
 
-// If the distance to the ground is less than this value, the player is considered grounded
-const GROUNDED_DISTANCE: f32 = 0.125;
-
 const SLIGHT_SCALE_DOWN: f32 = 0.9375;
 
 pub fn fps_controller_input(
@@ -193,8 +193,10 @@ pub fn fps_controller_input(
     mut mouse_events: EventReader<MouseMotion>,
     mut query: Query<(&FpsController, &mut FpsControllerInput)>,
 ) {
-    for (controller, mut input) in query.iter_mut()
-        .filter(|(controller, _)| controller.enable_input) {
+    for (controller, mut input) in query
+        .iter_mut()
+        .filter(|(controller, _)| controller.enable_input)
+    {
         let mut mouse_delta = Vec2::ZERO;
         for mouse_event in mouse_events.read() {
             mouse_delta += mouse_event.delta;
@@ -229,7 +231,7 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 
 pub fn fps_controller_move(
     time: Res<Time>,
-    physics_context: ReadDefaultRapierContext,
+    physics_context: ReadRapierContext,
     mut query: Query<(
         Entity,
         &FpsControllerInput,
@@ -265,7 +267,8 @@ pub fn fps_controller_move(
                     } else {
                         controller.fly_speed
                     };
-                    let mut move_to_world = Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
+                    let mut move_to_world =
+                        Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
                     velocity.linvel = move_to_world * input.movement * fly_speed;
@@ -275,7 +278,7 @@ pub fn fps_controller_move(
                 // Shape cast downwards to find ground
                 // Better than a ray cast as it handles when you are near the edge of a surface
                 let filter = QueryFilter::default().exclude_rigid_body(entity);
-                let ground_cast = physics_context.cast_shape(
+                let ground_cast = physics_context.single().unwrap().cast_shape(
                     transform.translation,
                     transform.rotation,
                     -Vec3::Y,
@@ -283,7 +286,7 @@ pub fn fps_controller_move(
                     // We do not want the shape cast to detect it,
                     // so provide a slightly smaller collider in the XZ plane
                     &scaled_collider_laterally(&collider, SLIGHT_SCALE_DOWN),
-                    ShapeCastOptions::with_max_time_of_impact(GROUNDED_DISTANCE),
+                    ShapeCastOptions::with_max_time_of_impact(controller.grounded_distance),
                     filter,
                 );
 
@@ -306,7 +309,8 @@ pub fn fps_controller_move(
                 wish_speed = f32::min(wish_speed, max_speed);
 
                 if let Some((hit, hit_details)) = unwrap_hit_details(ground_cast) {
-                    let has_traction = Vec3::dot(hit_details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                    let has_traction =
+                        Vec3::dot(hit_details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
                     // Only apply friction after at least one tick, allows b-hopping without losing speed
                     if controller.ground_tick >= 1 && has_traction {
@@ -339,7 +343,8 @@ pub fn fps_controller_move(
 
                     if has_traction {
                         let linear_velocity = velocity.linvel;
-                        velocity.linvel -= Vec3::dot(linear_velocity, hit_details.normal1) * hit_details.normal1;
+                        velocity.linvel -=
+                            Vec3::dot(linear_velocity, hit_details.normal1) * hit_details.normal1;
 
                         if input.jump {
                             velocity.linvel.y = controller.jump_speed;
@@ -395,21 +400,27 @@ pub fn fps_controller_move(
 
                 // Step offset really only works best for cylinders
                 // For capsules the player has to practically teleported to fully step up
-                if collider.as_cylinder().is_some() && controller.step_offset > f32::EPSILON && controller.ground_tick >= 1 {
+                if collider.as_cylinder().is_some()
+                    && controller.step_offset > f32::EPSILON
+                    && controller.ground_tick >= 1
+                {
                     // Try putting the player forward, but instead lifted upward by the step offset
                     // If we can find a surface below us, we can adjust our position to be on top of it
                     let future_position = transform.translation + velocity.linvel * dt;
                     let future_position_lifted = future_position + Vec3::Y * controller.step_offset;
-                    let cast = physics_context.cast_shape(
+                    let cast = physics_context.single().unwrap().cast_shape(
                         future_position_lifted,
                         transform.rotation,
                         -Vec3::Y,
                         &collider,
-                        ShapeCastOptions::with_max_time_of_impact(controller.step_offset * SLIGHT_SCALE_DOWN),
+                        ShapeCastOptions::with_max_time_of_impact(
+                            controller.step_offset * SLIGHT_SCALE_DOWN,
+                        ),
                         filter,
                     );
                     if let Some((hit, details)) = unwrap_hit_details(cast) {
-                        let has_traction_on_ledge = Vec3::dot(details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                        let has_traction_on_ledge =
+                            Vec3::dot(details.normal1, Vec3::Y) > controller.traction_normal_cutoff;
                         if has_traction_on_ledge {
                             transform.translation.y += controller.step_offset - hit.time_of_impact;
                         }
@@ -440,7 +451,8 @@ pub fn fps_controller_move(
                         &physics_context,
                         velocity.linvel,
                         dt,
-                    ).is_some()
+                    )
+                    .is_some()
                     {
                         velocity.linvel = Vec3::ZERO;
                     }
@@ -450,7 +462,9 @@ pub fn fps_controller_move(
     }
 }
 
-fn unwrap_hit_details(ground_cast: Option<(Entity, ShapeCastHit)>) -> Option<(ShapeCastHit, ShapeCastHitDetails)> {
+fn unwrap_hit_details(
+    ground_cast: Option<(Entity, ShapeCastHit)>,
+) -> Option<(ShapeCastHit, ShapeCastHitDetails)> {
     if let Some((_, hit)) = ground_cast {
         if let Some(details) = hit.details {
             return Some((hit, details));
@@ -459,17 +473,17 @@ fn unwrap_hit_details(ground_cast: Option<(Entity, ShapeCastHit)>) -> Option<(Sh
     None
 }
 
-
 /// Returns the offset that puts a point at the center of the player transform to the bottom of the collider.
 /// Needed for when we want to originate something at the foot of the player.
 fn collider_y_offset(collider: &Collider) -> Vec3 {
-    Vec3::Y * if let Some(cylinder) = collider.as_cylinder() {
-        cylinder.half_height()
-    } else if let Some(capsule) = collider.as_capsule() {
-        capsule.half_height() + capsule.radius()
-    } else {
-        panic!("Controller must use a cylinder or capsule collider")
-    }
+    Vec3::Y
+        * if let Some(cylinder) = collider.as_cylinder() {
+            cylinder.half_height()
+        } else if let Some(capsule) = collider.as_capsule() {
+            capsule.half_height() + capsule.radius()
+        } else {
+            panic!("Controller must use a cylinder or capsule collider")
+        }
 }
 
 /// Return a collider that is scaled laterally (XZ plane) but not vertically (Y axis).
@@ -478,7 +492,11 @@ fn scaled_collider_laterally(collider: &Collider, scale: f32) -> Collider {
         let new_cylinder = Collider::cylinder(cylinder.half_height(), cylinder.radius() * scale);
         new_cylinder
     } else if let Some(capsule) = collider.as_capsule() {
-        let new_capsule = Collider::capsule(capsule.segment().a(), capsule.segment().b(), capsule.radius() * scale);
+        let new_capsule = Collider::capsule(
+            capsule.segment().a(),
+            capsule.segment().b(),
+            capsule.radius() * scale,
+        );
         new_capsule
     } else {
         panic!("Controller must use a cylinder or capsule collider")
@@ -489,7 +507,7 @@ fn overhang_component(
     entity: Entity,
     collider: &Collider,
     transform: &Transform,
-    physics_context: &ReadDefaultRapierContext,
+    physics_context: &ReadRapierContext,
     velocity: Vec3,
     dt: f32,
 ) -> Option<Vec3> {
@@ -500,7 +518,7 @@ fn overhang_component(
     let filter = QueryFilter::default().exclude_rigid_body(entity);
     let collider_offset = collider_y_offset(collider);
     let future_position = transform.translation - collider_offset + velocity * dt;
-    let cast = physics_context.cast_shape(
+    let cast = physics_context.single().unwrap().cast_shape(
         future_position,
         transform.rotation,
         -velocity,
@@ -509,7 +527,7 @@ fn overhang_component(
         filter,
     );
     if let Some((_, hit_details)) = unwrap_hit_details(cast) {
-        let cast = physics_context.cast_ray(
+        let cast = physics_context.single().unwrap().cast_ray(
             future_position + Vec3::Y * 0.125,
             -Vec3::Y,
             0.375,
@@ -575,8 +593,10 @@ pub fn fps_controller_render(
         {
             let collider_offset = collider_y_offset(collider);
             let camera_offset = Vec3::Y * camera_config.height_offset;
-            render_transform.translation = logical_transform.translation + collider_offset + camera_offset;
-            render_transform.rotation = Quat::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
+            render_transform.translation =
+                logical_transform.translation + collider_offset + camera_offset;
+            render_transform.rotation =
+                Quat::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
         }
     }
 }

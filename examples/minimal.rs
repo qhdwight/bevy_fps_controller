@@ -18,6 +18,7 @@ fn main() {
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 10000.0,
+            affects_lightmapped_meshes: true,
         })
         .insert_resource(ClearColor(Color::linear_rgb(0.83, 0.96, 0.96)))
         .add_plugins(DefaultPlugins)
@@ -33,7 +34,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<AssetServer>) {
-    let mut window = window.single_mut();
+    let mut window = window.single_mut().unwrap();
     window.title = String::from("Minimal FPS Controller Example");
     // commands.spawn(Window { title: "Minimal FPS Controller Example".to_string(), ..default() });
 
