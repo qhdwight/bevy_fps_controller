@@ -36,7 +36,6 @@ fn main() {
 fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<AssetServer>) {
     let mut window = window.single_mut().unwrap();
     window.title = String::from("Minimal FPS Controller Example");
-    // commands.spawn(Window { title: "Minimal FPS Controller Example".to_string(), ..default() });
 
     commands.spawn((
         DirectionalLight {
@@ -206,7 +205,7 @@ fn manage_cursor(
 }
 
 fn display_text(
-    mut controller_query: Query<(&Transform, &Velocity)>,
+    mut controller_query: Query<(&Transform, &Velocity), With<LogicalPlayer>>,
     mut text_query: Query<&mut Text>,
 ) {
     for (transform, velocity) in &mut controller_query {

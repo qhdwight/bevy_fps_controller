@@ -83,7 +83,7 @@ pub struct FpsController {
     pub move_mode: MoveMode,
     pub radius: f32,
     pub gravity: f32,
-    // If the distance to the ground is less than this value, the player is considered grounded
+    /// If the distance to the ground is less than this value, the player is considered grounded
     pub grounded_distance: f32,
     pub walk_speed: f32,
     pub run_speed: f32,
