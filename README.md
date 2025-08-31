@@ -9,76 +9,23 @@ Feel free to make issues/PRs!
 
 ### Features
 
-* Air strafing and bunny hopping (hold down jump key)
-* Support for sloped ground
-* Crouching (prevents falling off ledges), sprinting
+* Air strafing
+* Bunny hopping if the jump key is held down
+* Moving along sloped ground
+* Crouching and sprinting
+* Crouching prevents falling off ledges (Rapier only)
+* Instantly clear small steps (Rapier only)
 * Noclip mode
 * Configurable settings
 
 ### Examples
 
-See [main.rs](./examples/minimal.rs)
+See [minimal_rapier.rs](./examples/minimal_rapier.rs) or [minimal_avian.rs](./examples/minimal_avian.rs)
+
+Make sure to enable either the `rapier` or `avian` feature in `Cargo.toml` depending on what your backing physics engine is.
 
 ```bash
-cargo run --release --example minimal
-```
-
-```rust
-use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
-
-use bevy_fps_controller::controller::*;
-
-fn main() {
-    App::new()
-        ...
-        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugin(FpsControllerPlugin)
-        .add_startup_system(setup)
-        ...
-}
-
-fn setup(mut commands: Commands, ...) {
-    ...
-    let logical_entity = commands
-        .spawn((
-            Collider::capsule_y(1.0, 0.5),
-            Friction {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Min,
-            },
-            Restitution {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Min,
-            },
-            ActiveEvents::COLLISION_EVENTS,
-            Velocity::zero(),
-            RigidBody::Dynamic,
-            Sleeping::disabled(),
-            LockedAxes::ROTATION_LOCKED,
-            AdditionalMassProperties::Mass(1.0),
-            GravityScale(0.0),
-            Ccd { enabled: true }, // Prevent clipping when going fast
-            TransformBundle::from_transform(Transform::from_xyz(0.0, 3.0, 0.0)),
-            LogicalPlayer,
-            FpsControllerInput {
-                pitch: -TAU / 12.0,
-                yaw: TAU * 5.0 / 8.0,
-                ..default()
-            },
-            FpsController { ..default() }
-        ))
-        .insert(CameraConfig {
-            height_offset: -0.5,
-        })
-        .id();
-
-    commands.spawn((
-        Camera3dBundle::default(),
-        RenderPlayer { logical_entity },
-    ));
-    ...
-}
+cargo run --release --features rapier --example minimal_rapier
 ```
 
 ### Demo

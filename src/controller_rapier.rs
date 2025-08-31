@@ -285,7 +285,7 @@ pub fn fps_controller_move(
                     // Consider when the controller is right up against a wall
                     // We do not want the shape cast to detect it,
                     // so provide a slightly smaller collider in the XZ plane
-                    &scaled_collider_laterally(&collider, SLIGHT_SCALE_DOWN),
+                    scaled_collider_laterally(&collider, SLIGHT_SCALE_DOWN).raw.as_ref(),
                     ShapeCastOptions::with_max_time_of_impact(controller.grounded_distance),
                     filter,
                 );
@@ -412,7 +412,7 @@ pub fn fps_controller_move(
                         future_position_lifted,
                         transform.rotation,
                         -Vec3::Y,
-                        &collider,
+                        collider.raw.as_ref(),
                         ShapeCastOptions::with_max_time_of_impact(
                             controller.step_offset * SLIGHT_SCALE_DOWN,
                         ),
@@ -522,7 +522,7 @@ fn overhang_component(
         future_position,
         transform.rotation,
         -velocity,
-        &cast_capsule,
+        cast_capsule.raw.as_ref(),
         ShapeCastOptions::with_max_time_of_impact(0.5),
         filter,
     );
