@@ -115,7 +115,7 @@ pub struct FpsController {
     pub stop_speed: f32,
     pub sensitivity: f32,
     pub enable_input: bool,
-    pub step_offset: f32,
+    pub experimental_step_offset: f32,
     pub key_forward: KeyCode,
     pub key_back: KeyCode,
     pub key_left: KeyCode,
@@ -126,6 +126,7 @@ pub struct FpsController {
     pub key_jump: KeyCode,
     pub key_fly: KeyCode,
     pub key_crouch: KeyCode,
+    pub experimental_enable_ledge_cling: bool,
 }
 
 impl Default for FpsController {
@@ -159,7 +160,7 @@ impl Default for FpsController {
             ground_tick: 0,
             stop_speed: 1.0,
             jump_speed: 8.5,
-            step_offset: 0.25,
+            experimental_step_offset: 0.0, // Does not work well on Avian yet.
             enable_input: true,
             key_forward: KeyCode::KeyW,
             key_back: KeyCode::KeyS,
@@ -172,6 +173,7 @@ impl Default for FpsController {
             key_fly: KeyCode::KeyF,
             key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
+            experimental_enable_ledge_cling: false, // Does not work well on Avian yet.
         }
     }
 }
@@ -405,33 +407,39 @@ pub fn fps_controller_move(
                 // Step offset really only works best for cylinders
                 // For capsules the player has to practically teleported to fully step up
                 if collider.shape().as_cylinder().is_some()
-                    && controller.step_offset > f32::EPSILON
+                    && controller.experimental_step_offset > f32::EPSILON
                     && controller.ground_tick >= 1
                 {
                     // Try putting the player forward, but instead lifted upward by the step offset
                     // If we can find a surface below us, we can adjust our position to be on top of it
                     let future_position = transform.translation + velocity.0 * dt;
-                    let future_position_lifted = future_position + Vec3::Y * controller.step_offset;
+                    let future_position_lifted =
+                        future_position + Vec3::Y * controller.experimental_step_offset;
                     if let Some(hit) = spatial_query_pipeline.cast_shape(
                         &collider,
                         future_position_lifted,
                         transform.rotation,
                         Dir3::new_unchecked(-Vec3::Y),
                         &ShapeCastConfig::from_max_distance(
-                            controller.step_offset * SLIGHT_SCALE_DOWN,
+                            controller.experimental_step_offset * SLIGHT_SCALE_DOWN,
                         ),
                         &filter,
                     ) {
                         let has_traction_on_ledge =
                             Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
                         if has_traction_on_ledge {
-                            transform.translation.y += controller.step_offset - hit.distance;
+                            transform.translation.y +=
+                                controller.experimental_step_offset - hit.distance;
                         }
                     }
                 }
 
                 // Prevent falling off ledges
-                if controller.ground_tick >= 1 && input.crouch && !input.jump {
+                if controller.experimental_enable_ledge_cling
+                    && controller.ground_tick >= 1
+                    && input.crouch
+                    && !input.jump
+                {
                     for _ in 0..2 {
                         // Find the component of our velocity that is overhanging and subtract it off
                         let overhang = overhang_component(
