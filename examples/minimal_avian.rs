@@ -75,6 +75,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             Mass(1.0),
             GravityScale(0.0),
             Transform::from_translation(SPAWN_POINT),
+            TransformInterpolation,
             LogicalPlayer,
             FpsControllerInput {
                 pitch: -TAU / 12.0,
