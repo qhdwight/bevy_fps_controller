@@ -1,11 +1,11 @@
 use std::f32::consts::TAU;
 
 use bevy::{
+    camera::Exposure,
     gltf::{Gltf, GltfMesh, GltfNode},
     math::Vec3Swizzles,
     prelude::*,
-    render::camera::Exposure,
-    window::CursorGrabMode,
+    window::{CursorGrabMode, CursorOptions},
 };
 use bevy_rapier3d::prelude::*;
 
@@ -183,23 +183,21 @@ fn scene_colliders(
 fn manage_cursor(
     btn: Res<ButtonInput<MouseButton>>,
     key: Res<ButtonInput<KeyCode>>,
-    mut window_query: Query<&mut Window>,
+    mut cursor: Single<&mut CursorOptions>,
     mut controller_query: Query<&mut FpsController>,
 ) {
-    for mut window in &mut window_query {
-        if btn.just_pressed(MouseButton::Left) {
-            window.cursor_options.grab_mode = CursorGrabMode::Locked;
-            window.cursor_options.visible = false;
-            for mut controller in &mut controller_query {
-                controller.enable_input = true;
-            }
+    if btn.just_pressed(MouseButton::Left) {
+        cursor.grab_mode = CursorGrabMode::Locked;
+        cursor.visible = false;
+        for mut controller in &mut controller_query {
+            controller.enable_input = true;
         }
-        if key.just_pressed(KeyCode::Escape) {
-            window.cursor_options.grab_mode = CursorGrabMode::None;
-            window.cursor_options.visible = true;
-            for mut controller in &mut controller_query {
-                controller.enable_input = false;
-            }
+    }
+    if key.just_pressed(KeyCode::Escape) {
+        cursor.grab_mode = CursorGrabMode::None;
+        cursor.visible = true;
+        for mut controller in &mut controller_query {
+            controller.enable_input = false;
         }
     }
 }

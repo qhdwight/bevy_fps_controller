@@ -14,8 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Install alsa and udev
-        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
+        # See: https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md
+      - name: Install Bevy dependencies
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends g++ pkg-config libx11-dev libasound2-dev libudev-dev libxkbcommon-x11-0  libwayland-dev libxkbcommon-dev
       - name: Build Rapier
         run: cargo build --verbose --features rapier --examples
       - name: Build Avian

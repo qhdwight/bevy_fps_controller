@@ -190,7 +190,7 @@ const SLIGHT_SCALE_DOWN: f32 = 0.9375;
 
 pub fn fps_controller_input(
     key_input: Res<ButtonInput<KeyCode>>,
-    mut mouse_events: EventReader<MouseMotion>,
+    mut mouse_events: MessageReader<MouseMotion>,
     mut query: Query<(&FpsController, &mut FpsControllerInput)>,
 ) {
     for (controller, mut input) in query
