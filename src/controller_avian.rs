@@ -6,50 +6,35 @@ use avian3d::{
 };
 use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
 
-/// Manages the FPS controllers. Executes in `PreUpdate`, after bevy's internal
-/// input processing is finished.
-///
-/// If you need a system in `PreUpdate` to execute after FPS Controller's systems,
-/// Do it like so:
-///
-/// ```
-/// # use bevy::prelude::*;
-///
-/// struct MyPlugin;
-/// impl Plugin for MyPlugin {
-///     fn build(&self, app: &mut App) {
-///         app.add_systems(
-///             PreUpdate,
-///             my_system.after(bevy_fps_controller::controller::fps_controller_render),
-///         );
-///     }
-/// }
-///
-/// fn my_system() { }
-/// ```
 pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        use bevy::input::{gamepad, keyboard, mouse, touch};
-
-        app.add_systems(
-            PreUpdate,
-            (
-                fps_controller_input,
-                fps_controller_look,
-                fps_controller_move,
-                fps_controller_render,
+        app.init_resource::<DidFixedTimestepRunThisFrame>()
+            .add_systems(PreUpdate, clear_fixed_timestep_flag)
+            .add_systems(
+                FixedPreUpdate,
+                (set_fixed_time_step_flag, fps_controller_move),
             )
-                .chain()
-                .after(mouse::mouse_button_input_system)
-                .after(keyboard::keyboard_input_system)
-                .after(gamepad::gamepad_event_processing_system)
-                .after(gamepad::gamepad_connection_system)
-                .after(touch::touch_screen_input_system),
-        );
+            .add_systems(
+                RunFixedMainLoop,
+                (
+                    (fps_controller_input, fps_controller_look)
+                        .chain()
+                        .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
+                    (
+                        clear_input.run_if(did_fixed_timestep_run_this_frame),
+                        fps_controller_render,
+                    )
+                        .chain()
+                        .in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
+                ),
+            );
     }
 }
+
+#[derive(Resource, Default)]
+pub struct DidFixedTimestepRunThisFrame(bool);
 
 #[derive(PartialEq)]
 pub enum MoveMode {
@@ -129,6 +114,8 @@ pub struct FpsController {
     pub key_fly: KeyCode,
     pub key_crouch: KeyCode,
     pub experimental_enable_ledge_cling: bool,
+
+    pub previous_translation: Option<Vec3>,
 }
 
 impl Default for FpsController {
@@ -177,21 +164,49 @@ impl Default for FpsController {
             key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
             experimental_enable_ledge_cling: false, // Does not work well on Avian yet.
+
+            previous_translation: None,
         }
     }
 }
 
-// ██╗      ██████╗  ██████╗ ██╗ ██████╗
-// ██║     ██╔═══██╗██╔════╝ ██║██╔════╝
-// ██║     ██║   ██║██║  ███╗██║██║
-// ██║     ██║   ██║██║   ██║██║██║
-// ███████╗╚██████╔╝╚██████╔╝██║╚██████╗
-// ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝ ╚═════╝
+//     __                _
+//    / /   ____  ____ _(_)____
+//   / /   / __ \/ __ `/ / ___/
+//  / /___/ /_/ / /_/ / / /__
+// /_____/\____/\__, /_/\___/
+//             /____/
 
 // Used as padding by camera pitching (up/down) to avoid spooky math problems
 const ANGLE_EPSILON: f32 = 0.001953125;
 
 const SLIGHT_SCALE_DOWN: f32 = 0.9375;
+
+fn clear_fixed_timestep_flag(
+    mut did_fixed_timestep_run_this_frame: ResMut<DidFixedTimestepRunThisFrame>,
+) {
+    did_fixed_timestep_run_this_frame.0 = false;
+}
+
+fn set_fixed_time_step_flag(
+    mut did_fixed_timestep_run_this_frame: ResMut<DidFixedTimestepRunThisFrame>,
+) {
+    did_fixed_timestep_run_this_frame.0 = true;
+}
+
+fn did_fixed_timestep_run_this_frame(
+    did_fixed_timestep_run_this_frame: Res<DidFixedTimestepRunThisFrame>,
+) -> bool {
+    did_fixed_timestep_run_this_frame.0
+}
+
+fn clear_input(mut input: Single<&mut FpsControllerInput>) {
+    input.movement = Vec3::ZERO;
+    input.sprint = false;
+    input.jump = false;
+    input.fly = false;
+    input.crouch = false;
+}
 
 pub fn fps_controller_input(
     key_input: Res<ButtonInput<KeyCode>>,
@@ -220,10 +235,10 @@ pub fn fps_controller_input(
             get_axis(&key_input, controller.key_up, controller.key_down),
             get_axis(&key_input, controller.key_forward, controller.key_back),
         );
-        input.sprint = key_input.pressed(controller.key_sprint);
-        input.jump = key_input.pressed(controller.key_jump);
-        input.fly = key_input.just_pressed(controller.key_fly);
-        input.crouch = key_input.pressed(controller.key_crouch);
+        input.sprint |= key_input.pressed(controller.key_sprint);
+        input.jump |= key_input.pressed(controller.key_jump);
+        input.fly |= key_input.just_pressed(controller.key_fly);
+        input.crouch |= key_input.pressed(controller.key_crouch);
     }
 }
 
@@ -235,7 +250,7 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 }
 
 pub fn fps_controller_move(
-    time: Res<Time>,
+    time: Res<Time<Fixed>>,
     spatial_query_pipeline: Res<SpatialQueryPipeline>,
     mut query: Query<
         (
@@ -246,7 +261,7 @@ pub fn fps_controller_move(
             &mut Transform,
             &mut LinearVelocity,
         ),
-        With<LogicalPlayer>,
+        (With<LogicalPlayer>, Without<RenderPlayer>),
     >,
 ) {
     let dt = time.delta_secs();
@@ -254,6 +269,8 @@ pub fn fps_controller_move(
     for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
         query.iter_mut()
     {
+        controller.previous_translation = Some(transform.translation);
+
         if input.fly {
             controller.move_mode = match controller.move_mode {
                 MoveMode::Noclip => MoveMode::Ground,
@@ -573,28 +590,32 @@ fn get_axis(key_input: &Res<ButtonInput<KeyCode>>, key_pos: KeyCode, key_neg: Ke
     get_pressed(key_input, key_pos) - get_pressed(key_input, key_neg)
 }
 
-// ██████╗ ███████╗███╗   ██╗██████╗ ███████╗██████╗
-// ██╔══██╗██╔════╝████╗  ██║██╔══██╗██╔════╝██╔══██╗
-// ██████╔╝█████╗  ██╔██╗ ██║██║  ██║█████╗  ██████╔╝
-// ██╔══██╗██╔══╝  ██║╚██╗██║██║  ██║██╔══╝  ██╔══██╗
-// ██║  ██║███████╗██║ ╚████║██████╔╝███████╗██║  ██║
-// ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝
+//     ____                 __
+//    / __ \___  ____  ____/ /__  _____
+//   / /_/ / _ \/ __ \/ __  / _ \/ ___/
+//  / _, _/  __/ / / / /_/ /  __/ /
+// /_/ |_|\___/_/ /_/\__,_/\___/_/
 
 pub fn fps_controller_render(
+    fixed_time: Res<Time<Fixed>>,
     mut render_query: Query<(&mut Transform, &RenderPlayer), With<RenderPlayer>>,
     logical_query: Query<
         (&Transform, &Collider, &FpsController, &CameraConfig),
         (With<LogicalPlayer>, Without<RenderPlayer>),
     >,
 ) {
+    let t = fixed_time.overstep_fraction();
+
     for (mut render_transform, render_player) in render_query.iter_mut() {
         if let Ok((logical_transform, collider, controller, camera_config)) =
             logical_query.get(render_player.logical_entity)
         {
+            let previous = controller.previous_translation;
+            let current = logical_transform.translation;
+            let interpolated = previous.unwrap_or(current).lerp(current, t);
             let collider_offset = collider_y_offset(collider);
             let camera_offset = Vec3::Y * camera_config.height_offset;
-            render_transform.translation =
-                logical_transform.translation + collider_offset + camera_offset;
+            render_transform.translation = interpolated + collider_offset + camera_offset;
             render_transform.rotation =
                 Quat::from_euler(EulerRot::YXZ, controller.yaw, controller.pitch, 0.0);
         }

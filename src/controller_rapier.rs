@@ -5,11 +5,17 @@ use bevy_rapier3d::prelude::*;
 
 pub struct FpsControllerPlugin;
 
+#[derive(Resource, Default)]
+pub struct DidFixedTimestepRunThisFrame(bool);
+
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DidFixedTimestepRunThisFrame>()
             .add_systems(PreUpdate, clear_fixed_timestep_flag)
-            .add_systems(FixedPreUpdate, set_fixed_time_step_flag)
+            .add_systems(
+                FixedPreUpdate,
+                (set_fixed_time_step_flag, fps_controller_move),
+            )
             .add_systems(
                 RunFixedMainLoop,
                 (
@@ -23,8 +29,7 @@ impl Plugin for FpsControllerPlugin {
                         .chain()
                         .in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
                 ),
-            )
-            .add_systems(FixedPreUpdate, fps_controller_move);
+            );
     }
 }
 
@@ -159,9 +164,6 @@ impl Default for FpsController {
         }
     }
 }
-
-#[derive(Resource, Deref, DerefMut, Default)]
-pub struct DidFixedTimestepRunThisFrame(bool);
 
 //     __                _
 //    / /   ____  ____ _(_)____
