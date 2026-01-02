@@ -7,18 +7,24 @@ pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            RunFixedMainLoop,
-            (
-                (fps_controller_input, fps_controller_look)
-                    .chain()
-                    .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
-                fps_controller_render
-                    .chain()
-                    .in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
-            ),
-        )
-        .add_systems(FixedPreUpdate, fps_controller_move);
+        app.init_resource::<DidFixedTimestepRunThisFrame>()
+            .add_systems(PreUpdate, clear_fixed_timestep_flag)
+            .add_systems(FixedPreUpdate, set_fixed_time_step_flag)
+            .add_systems(
+                RunFixedMainLoop,
+                (
+                    (fps_controller_input, fps_controller_look)
+                        .chain()
+                        .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
+                    (
+                        clear_input.run_if(did_fixed_timestep_run_this_frame),
+                        fps_controller_render,
+                    )
+                        .chain()
+                        .in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
+                ),
+            )
+            .add_systems(FixedPreUpdate, fps_controller_move);
     }
 }
 
@@ -169,6 +175,32 @@ const ANGLE_EPSILON: f32 = 0.001953125;
 
 const SLIGHT_SCALE_DOWN: f32 = 0.9375;
 
+fn clear_fixed_timestep_flag(
+    mut did_fixed_timestep_run_this_frame: ResMut<DidFixedTimestepRunThisFrame>,
+) {
+    did_fixed_timestep_run_this_frame.0 = false;
+}
+
+fn set_fixed_time_step_flag(
+    mut did_fixed_timestep_run_this_frame: ResMut<DidFixedTimestepRunThisFrame>,
+) {
+    did_fixed_timestep_run_this_frame.0 = true;
+}
+
+fn did_fixed_timestep_run_this_frame(
+    did_fixed_timestep_run_this_frame: Res<DidFixedTimestepRunThisFrame>,
+) -> bool {
+    did_fixed_timestep_run_this_frame.0
+}
+
+fn clear_input(mut input: Single<&mut FpsControllerInput>) {
+    input.movement = Vec3::ZERO;
+    input.sprint = false;
+    input.jump = false;
+    input.fly = false;
+    input.crouch = false;
+}
+
 pub fn fps_controller_input(
     key_input: Res<ButtonInput<KeyCode>>,
     mut mouse_events: MessageReader<MouseMotion>,
@@ -196,10 +228,10 @@ pub fn fps_controller_input(
             get_axis(&key_input, controller.key_up, controller.key_down),
             get_axis(&key_input, controller.key_forward, controller.key_back),
         );
-        input.sprint = key_input.pressed(controller.key_sprint);
-        input.jump = key_input.pressed(controller.key_jump);
-        input.fly = key_input.just_pressed(controller.key_fly);
-        input.crouch = key_input.pressed(controller.key_crouch);
+        input.sprint |= key_input.pressed(controller.key_sprint);
+        input.jump |= key_input.pressed(controller.key_jump);
+        input.fly |= key_input.just_pressed(controller.key_fly);
+        input.crouch |= key_input.pressed(controller.key_crouch);
     }
 }
 
