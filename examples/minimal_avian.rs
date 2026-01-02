@@ -23,7 +23,6 @@ fn main() {
         .insert_resource(ClearColor(Color::linear_rgb(0.83, 0.96, 0.96)))
         .add_plugins(DefaultPlugins)
         .add_plugins(PhysicsPlugins::default())
-        // .add_plugins(PhysicsDebugPlugin::default())
         .add_plugins(FpsControllerPlugin)
         .add_systems(Startup, setup)
         .add_systems(
