@@ -106,7 +106,7 @@ pub struct FpsController {
     pub key_fly: KeyCode,
     pub key_crouch: KeyCode,
 
-    pub previous_translation: Vec3,
+    pub previous_translation: Option<Vec3>,
 }
 
 impl Default for FpsController {
@@ -155,7 +155,7 @@ impl Default for FpsController {
             key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
 
-            previous_translation: Vec3::default(),
+            previous_translation: None,
         }
     }
 }
@@ -262,7 +262,7 @@ pub fn fps_controller_move(
     for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
         query.iter_mut()
     {
-        controller.previous_translation = transform.translation;
+        controller.previous_translation = Some(transform.translation);
 
         if input.fly {
             controller.move_mode = match controller.move_mode {
@@ -615,7 +615,7 @@ pub fn fps_controller_render(
         {
             let previous = controller.previous_translation;
             let current = logical_transform.translation;
-            let interpolated = previous.lerp(current, t);
+            let interpolated = previous.unwrap_or(current).lerp(current, t);
             let collider_offset = collider_y_offset(collider);
             let camera_offset = Vec3::Y * camera_config.height_offset;
             render_transform.translation = interpolated + collider_offset + camera_offset;
