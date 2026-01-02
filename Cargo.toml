@@ -1,6 +1,6 @@
 [package]
 name = "bevy_fps_controller"
-version = "17.0.0"
+version = "17.1.0"
 edition = "2021"
 authors = ["bevy_fps_controller"]
 repository = "https://github.com/qhdwight/bevy_fps_controller"
