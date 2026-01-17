@@ -15,10 +15,9 @@ const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.625, 0.0);
 
 fn main() {
     App::new()
-        .insert_resource(AmbientLight {
-            color: Color::WHITE,
+        .insert_resource(GlobalAmbientLight  {
             brightness: 10000.0,
-            affects_lightmapped_meshes: true,
+            ..default()
         })
         .insert_resource(ClearColor(Color::linear_rgb(0.83, 0.96, 0.96)))
         .add_plugins(DefaultPlugins)
