@@ -1,9 +1,6 @@
 use std::f32::consts::*;
 
-use avian3d::{
-    parry::{math::Point, shape::SharedShape},
-    prelude::*,
-};
+use avian3d::{parry::shape::SharedShape, prelude::*};
 use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
 
 pub struct FpsControllerPlugin;
@@ -14,7 +11,12 @@ impl Plugin for FpsControllerPlugin {
             .add_systems(PreUpdate, clear_fixed_timestep_flag)
             .add_systems(
                 FixedPreUpdate,
-                (set_fixed_time_step_flag, fps_controller_move),
+                (
+                    set_fixed_time_step_flag,
+                    fps_controller_move,
+                    fps_controller_update_collider,
+                )
+                    .chain(),
             )
             .add_systems(
                 RunFixedMainLoop,
@@ -251,13 +253,13 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 
 pub fn fps_controller_move(
     time: Res<Time<Fixed>>,
-    spatial_query_pipeline: Res<SpatialQueryPipeline>,
+    spatial_query_pipeline: SpatialQuery,
     mut query: Query<
         (
             Entity,
             &FpsControllerInput,
             &mut FpsController,
-            &mut Collider,
+            &Collider,
             &mut Transform,
             &mut LinearVelocity,
         ),
@@ -266,9 +268,7 @@ pub fn fps_controller_move(
 ) {
     let dt = time.delta_secs();
 
-    for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
-        query.iter_mut()
-    {
+    for (entity, input, mut controller, collider, mut transform, mut velocity) in query.iter_mut() {
         controller.previous_translation = Some(transform.translation);
 
         if input.fly {
@@ -410,17 +410,6 @@ pub fn fps_controller_move(
                 controller.height += dt * crouch_speed;
                 controller.height = controller.height.clamp(crouch_height, upright_height);
 
-                if let Some(capsule) = collider.shape().as_capsule() {
-                    let radius = capsule.radius;
-                    let half = Point::from(Vec3::Y * (controller.height * 0.5 - radius));
-                    collider.set_shape(SharedShape::capsule(-half, half, radius));
-                } else if let Some(cylinder) = collider.shape().as_cylinder() {
-                    let radius = cylinder.radius;
-                    collider.set_shape(SharedShape::cylinder(controller.height * 0.5, radius));
-                } else {
-                    panic!("Controller must use a cylinder or capsule collider")
-                }
-
                 // Step offset really only works best for cylinders
                 // For capsules the player has to practically teleported to fully step up
                 if collider.shape().as_cylinder().is_some()
@@ -520,7 +509,7 @@ fn overhang_component(
     entity: Entity,
     collider: &Collider,
     transform: &Transform,
-    spatial_query: &SpatialQueryPipeline,
+    spatial_query: &SpatialQuery,
     velocity: Vec3,
     dt: f32,
 ) -> Option<Vec3> {
@@ -588,6 +577,23 @@ fn get_pressed(key_input: &Res<ButtonInput<KeyCode>>, key: KeyCode) -> f32 {
 
 fn get_axis(key_input: &Res<ButtonInput<KeyCode>>, key_pos: KeyCode, key_neg: KeyCode) -> f32 {
     get_pressed(key_input, key_pos) - get_pressed(key_input, key_neg)
+}
+
+pub fn fps_controller_update_collider(
+    mut query: Query<(&FpsController, &mut Collider), With<LogicalPlayer>>,
+) {
+    for (controller, mut collider) in query.iter_mut() {
+        if let Some(capsule) = collider.shape().as_capsule() {
+            let radius = capsule.radius;
+            let half = Vec3::Y * (controller.height * 0.5 - radius);
+            collider.set_shape(SharedShape::capsule(-half, half, radius));
+        } else if let Some(cylinder) = collider.shape().as_cylinder() {
+            let radius = cylinder.radius;
+            collider.set_shape(SharedShape::cylinder(controller.height * 0.5, radius));
+        } else {
+            panic!("Controller must use a cylinder or capsule collider")
+        }
+    }
 }
 
 //     ____                 __
