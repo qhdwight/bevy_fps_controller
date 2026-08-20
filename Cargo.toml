@@ -1,6 +1,6 @@
 [package]
 name = "bevy_fps_controller"
-version = "18.0.0"
+version = "19.0.0"
 edition = "2021"
 authors = ["bevy_fps_controller"]
 repository = "https://github.com/qhdwight/bevy_fps_controller"
@@ -10,9 +10,9 @@ readme = "README.md"
 description = "Bevy plugin that adds a Source engine inspired FPS movement controller"
 
 [dependencies]
-bevy = "0.18"
-bevy_rapier3d = { version = "0.33", optional = true }
-avian3d = { version = "0.6", optional = true }
+bevy = "0.19"
+bevy_rapier3d = { version = "0.36", optional = true }
+avian3d = { version = "0.7", optional = true }
 
 [features]
 default = []
