@@ -277,9 +277,9 @@ pub fn fps_controller_move(
             MoveMode::Noclip => {
                 if input.movement == Vec3::ZERO {
                     let friction = controller.fly_friction.clamp(0.0, 1.0);
-                    velocity.linvel *= 1.0 - friction;
-                    if velocity.linvel.length_squared() < f32::EPSILON {
-                        velocity.linvel = Vec3::ZERO;
+                    velocity.linear *= 1.0 - friction;
+                    if velocity.linear.length_squared() < f32::EPSILON {
+                        velocity.linear = Vec3::ZERO;
                     }
                 } else {
                     let fly_speed = if input.sprint {
@@ -291,7 +291,7 @@ pub fn fps_controller_move(
                         Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
                     move_to_world.z_axis *= -1.0; // Forward is -Z
                     move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
-                    velocity.linvel = move_to_world * input.movement * fly_speed;
+                    velocity.linear = move_to_world * input.movement * fly_speed;
                 }
             }
             MoveMode::Ground => {
@@ -336,18 +336,18 @@ pub fn fps_controller_move(
 
                     // Only apply friction after at least one tick, allows b-hopping without losing speed
                     if controller.ground_tick >= 1 && has_traction {
-                        let lateral_speed = velocity.linvel.xz().length();
+                        let lateral_speed = velocity.linear.xz().length();
                         if lateral_speed > controller.friction_speed_cutoff {
                             let control = f32::max(lateral_speed, controller.stop_speed);
                             let drop = control * controller.friction * dt;
                             let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
-                            velocity.linvel.x *= new_speed;
-                            velocity.linvel.z *= new_speed;
+                            velocity.linear.x *= new_speed;
+                            velocity.linear.z *= new_speed;
                         } else {
-                            velocity.linvel = Vec3::ZERO;
+                            velocity.linear = Vec3::ZERO;
                         }
                         if controller.ground_tick == 1 {
-                            velocity.linvel.y = -hit.time_of_impact;
+                            velocity.linear.y = -hit.time_of_impact;
                         }
                     }
 
@@ -355,21 +355,21 @@ pub fn fps_controller_move(
                         wish_direction,
                         wish_speed,
                         controller.acceleration,
-                        velocity.linvel,
+                        velocity.linear,
                         dt,
                     );
                     if !has_traction {
                         add.y -= controller.gravity * dt;
                     }
-                    velocity.linvel += add;
+                    velocity.linear += add;
 
                     if has_traction {
-                        let linear_velocity = velocity.linvel;
-                        velocity.linvel -=
+                        let linear_velocity = velocity.linear;
+                        velocity.linear -=
                             Vec3::dot(linear_velocity, hit_details.normal1) * hit_details.normal1;
 
                         if input.jump {
-                            velocity.linvel.y = controller.jump_speed;
+                            velocity.linear.y = controller.jump_speed;
                         }
                     }
 
@@ -383,17 +383,17 @@ pub fn fps_controller_move(
                         wish_direction,
                         wish_speed,
                         controller.air_acceleration,
-                        velocity.linvel,
+                        velocity.linear,
                         dt,
                     );
                     add.y = -controller.gravity * dt;
-                    velocity.linvel += add;
+                    velocity.linear += add;
 
-                    let air_speed = velocity.linvel.xz().length();
+                    let air_speed = velocity.linear.xz().length();
                     if air_speed > controller.max_air_speed {
                         let ratio = controller.max_air_speed / air_speed;
-                        velocity.linvel.x *= ratio;
-                        velocity.linvel.z *= ratio;
+                        velocity.linear.x *= ratio;
+                        velocity.linear.z *= ratio;
                     }
                 }
 
@@ -428,7 +428,7 @@ pub fn fps_controller_move(
                 {
                     // Try putting the player forward, but instead lifted upward by the step offset
                     // If we can find a surface below us, we can adjust our position to be on top of it
-                    let future_position = transform.translation + velocity.linvel * dt;
+                    let future_position = transform.translation + velocity.linear * dt;
                     let future_position_lifted = future_position + Vec3::Y * controller.step_offset;
                     let cast = physics_context.single().unwrap().cast_shape(
                         future_position_lifted,
@@ -458,11 +458,11 @@ pub fn fps_controller_move(
                             &collider,
                             transform.as_ref(),
                             &physics_context,
-                            velocity.linvel,
+                            velocity.linear,
                             dt,
                         );
                         if let Some(overhang) = overhang {
-                            velocity.linvel -= overhang;
+                            velocity.linear -= overhang;
                         }
                     }
                     // If we are still overhanging consider unsolvable and freeze
@@ -471,12 +471,12 @@ pub fn fps_controller_move(
                         &collider,
                         transform.as_ref(),
                         &physics_context,
-                        velocity.linvel,
+                        velocity.linear,
                         dt,
                     )
                     .is_some()
                     {
-                        velocity.linvel = Vec3::ZERO;
+                        velocity.linear = Vec3::ZERO;
                     }
                 }
             }
@@ -552,7 +552,7 @@ fn overhang_component(
         let cast = physics_context.single().unwrap().cast_ray(
             future_position + Vec3::Y * 0.125,
             -Vec3::Y,
-            0.375.into(),
+            0.375_f32.into(),
             false,
             filter,
         );

@@ -15,10 +15,9 @@ const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.625, 0.0);
 
 fn main() {
     App::new()
-        .insert_resource(AmbientLight {
-            color: Color::WHITE,
+        .insert_resource(GlobalAmbientLight  {
             brightness: 10000.0,
-            affects_lightmapped_meshes: true,
+            ..default()
         })
         .insert_resource(ClearColor(Color::linear_rgb(0.83, 0.96, 0.96)))
         .add_plugins(DefaultPlugins)
@@ -39,7 +38,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     commands.spawn((
         DirectionalLight {
             illuminance: light_consts::lux::FULL_DAYLIGHT,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_xyz(4.0, 7.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -109,8 +108,8 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     commands.spawn((
         Text(String::from("")),
         TextFont {
-            font: assets.load("fira_mono.ttf"),
-            font_size: 24.0,
+            font: assets.load("fira_mono.ttf").into(),
+            font_size: FontSize::Px(24.0),
             ..default()
         },
         TextColor(Color::BLACK),
@@ -129,7 +128,7 @@ fn respawn(mut query: Query<(&mut Transform, &mut Velocity)>) {
             continue;
         }
 
-        velocity.linvel = Vec3::ZERO;
+        velocity.linear = Vec3::ZERO;
         transform.translation = SPAWN_POINT;
     }
 }
@@ -156,7 +155,7 @@ fn scene_colliders(
 
     if let Some(gltf) = gltf {
         let scene = gltf.scenes.first().unwrap().clone();
-        commands.spawn(SceneRoot(scene));
+        commands.spawn(WorldAssetRoot(scene));
         for node in &gltf.nodes {
             let node = gltf_node_assets.get(node).unwrap();
             if let Some(gltf_mesh) = node.mesh.clone() {
@@ -209,13 +208,13 @@ fn display_text(
         for mut text in &mut text_query {
             text.0 = format!(
                 "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}\nspd: {:.2}",
-                velocity.linvel.x,
-                velocity.linvel.y,
-                velocity.linvel.z,
+                velocity.linear.x,
+                velocity.linear.y,
+                velocity.linear.z,
                 transform.translation.x,
                 transform.translation.y,
                 transform.translation.z,
-                velocity.linvel.xz().length()
+                velocity.linear.xz().length()
             );
         }
     }

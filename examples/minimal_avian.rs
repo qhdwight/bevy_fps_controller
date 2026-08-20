@@ -15,10 +15,9 @@ const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.625, 0.0);
 
 fn main() {
     App::new()
-        .insert_resource(AmbientLight {
-            color: Color::WHITE,
+        .insert_resource(GlobalAmbientLight  {
             brightness: 10000.0,
-            affects_lightmapped_meshes: true,
+            ..default()
         })
         .insert_resource(ClearColor(Color::linear_rgb(0.83, 0.96, 0.96)))
         .add_plugins(DefaultPlugins)
@@ -39,7 +38,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     commands.spawn((
         DirectionalLight {
             illuminance: light_consts::lux::FULL_DAYLIGHT,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_xyz(4.0, 7.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -107,8 +106,8 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     commands.spawn((
         Text(String::from("")),
         TextFont {
-            font: assets.load("fira_mono.ttf"),
-            font_size: 24.0,
+            font: assets.load("fira_mono.ttf").into(),
+            font_size: FontSize::Px(24.0),
             ..default()
         },
         TextColor(Color::BLACK),
@@ -154,7 +153,7 @@ fn scene_colliders(
 
     if let Some(gltf) = gltf {
         let scene = gltf.scenes.first().unwrap().clone();
-        commands.spawn(SceneRoot(scene));
+        commands.spawn(WorldAssetRoot(scene));
         for node in &gltf.nodes {
             let node = gltf_node_assets.get(node).unwrap();
             if let Some(gltf_mesh) = node.mesh.clone() {
@@ -162,7 +161,10 @@ fn scene_colliders(
                 for mesh_primitive in &gltf_mesh.primitives {
                     let mesh = mesh_assets.get(&mesh_primitive.mesh).unwrap();
                     commands.spawn((
-                        Collider::trimesh_from_mesh(mesh).unwrap(),
+                        // `TrimeshFlags::all()` includes `FIX_INTERNAL_EDGES`, which prevents
+                        // ghost collisions against the internal edges of the level mesh
+                        Collider::trimesh_from_mesh_with_config(mesh, TrimeshFlags::all())
+                            .unwrap(),
                         RigidBody::Static,
                         node.transform,
                     ));
