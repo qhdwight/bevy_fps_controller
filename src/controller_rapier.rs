@@ -552,7 +552,7 @@ fn overhang_component(
         let cast = physics_context.single().unwrap().cast_ray(
             future_position + Vec3::Y * 0.125,
             -Vec3::Y,
-            0.375_f32.into(),
+            0.375,
             false,
             filter,
         );
